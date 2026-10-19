@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { appRouter } from "../server/routers";
 import type { TrpcContext } from "../server/_core/context";
-import { getSessionCookieName } from "../server/_core/cookies";
+import { sessionCookieName } from "../server/services/security";
 
 type CookieCall = {
   name: string;
@@ -20,6 +20,12 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
     name: "Sample User",
     loginMethod: "manus",
     role: "user",
+    phoneNumber: "+233241234567",
+    passwordHash: null,
+    phoneVerifiedAt: new Date(),
+    campusId: null,
+    failedLoginAttempts: 0,
+    loginLockedUntil: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
@@ -41,8 +47,7 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
   return { ctx, clearedCookies };
 }
 
-// TODO: Remove `.skip` below once you implement user authentication
-describe.skip("auth.logout", () => {
+describe("auth.logout", () => {
   it("clears the session cookie and reports success", async () => {
     const { ctx, clearedCookies } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
@@ -51,7 +56,7 @@ describe.skip("auth.logout", () => {
 
     expect(result).toEqual({ success: true });
     expect(clearedCookies).toHaveLength(1);
-    expect(clearedCookies[0]?.name).toBe(getSessionCookieName(ctx.req));
+    expect(clearedCookies[0]?.name).toBe(sessionCookieName());
     expect(clearedCookies[0]?.options).toMatchObject({
       maxAge: -1,
       secure: true,

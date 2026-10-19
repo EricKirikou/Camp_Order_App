@@ -108,7 +108,7 @@ export function createCorsMiddleware(
     );
     res.header(
       "Access-Control-Allow-Headers",
-      "Content-Type, Accept, Authorization, X-Requested-With",
+      "Content-Type, Accept, Authorization, X-Requested-With, X-CampOrder-Client",
     );
     res.header("Access-Control-Allow-Credentials", "true");
     if (req.method === "OPTIONS") {

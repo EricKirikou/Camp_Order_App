@@ -17,6 +17,7 @@ const env = {
   ownerId: process.env.EXPO_PUBLIC_OWNER_OPEN_ID ?? "",
   ownerName: process.env.EXPO_PUBLIC_OWNER_NAME ?? "",
   apiBaseUrl: extra.apiBaseUrl ?? process.env.EXPO_PUBLIC_API_BASE_URL ?? "",
+  previewBaseUrl: extra.previewBaseUrl ?? process.env.EXPO_WEB_PREVIEW_URL ?? "",
   deepLinkScheme: schemeFromBundleId,
 };
 
@@ -26,6 +27,7 @@ export const APP_ID = env.appId;
 export const OWNER_OPEN_ID = env.ownerId;
 export const OWNER_NAME = env.ownerName;
 export const API_BASE_URL = env.apiBaseUrl;
+const PREVIEW_BASE_URL = env.previewBaseUrl;
 
 /**
  * Get the API base URL, deriving from current hostname if not set.
@@ -45,6 +47,17 @@ export function getApiBaseUrl(): string {
     const apiHostname = hostname.replace(/^8081-/, "3000-");
     if (apiHostname !== hostname) {
       return `${protocol}//${apiHostname}`;
+    }
+  }
+
+  // Native Expo Go uses the current managed preview origin supplied by Mobile runtime.
+  if (PREVIEW_BASE_URL) {
+    try {
+      const { protocol, hostname } = new URL(PREVIEW_BASE_URL);
+      const apiHostname = hostname.replace(/^(?:8328|8081)-/, "3000-");
+      if (apiHostname !== hostname) return `${protocol}//${apiHostname}`;
+    } catch {
+      // Continue to the relative fallback only for plain local runtimes.
     }
   }
 
