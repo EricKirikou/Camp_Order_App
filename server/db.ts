@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import type { InsertUser } from "../drizzle/schema";
@@ -8,11 +10,22 @@ let _db: ReturnType<typeof drizzle> | null = null;
 
 /** Reuse the managed MySQL connection. Development and published app share this database. */
 export async function getDb() {
-  if (!_db && (process.env.DATABASE_URL || ENV.databaseUrl)) {
+  const databaseUrl = process.env.DATABASE_URL || ENV.databaseUrl;
+  if (!_db && databaseUrl) {
     try {
-      _db = drizzle(process.env.DATABASE_URL || ENV.databaseUrl);
-    } catch {
-      console.warn("[Database] Failed to connect");
+      const parsedUrl = new URL(databaseUrl);
+      const requiresTls = parsedUrl.searchParams.get("ssl-mode")?.toLowerCase() === "required";
+      parsedUrl.searchParams.delete("ssl-mode");
+      const caFile = process.env.DATABASE_SSL_CA_FILE;
+      if (requiresTls && !caFile) throw new Error("DATABASE_SSL_CA_FILE is required for verified TLS.");
+      _db = drizzle({
+        connection: {
+          uri: parsedUrl.toString(),
+          ...(requiresTls ? { ssl: { ca: readFileSync(resolve(process.cwd(), caFile!), "utf8") } } : {}),
+        },
+      });
+    } catch (error) {
+      console.warn("[Database] Failed to configure connection:", error instanceof Error ? error.message : "unknown error");
       _db = null;
     }
   }

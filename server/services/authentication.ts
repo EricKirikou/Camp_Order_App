@@ -111,20 +111,27 @@ export async function startSignup(input: { name: string; phone: string; password
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Account service is unavailable." });
   const phone = parsePhone(input.phone);
+  const email = input.email?.trim().toLowerCase() || null;
   const existing = await db.select().from(users).where(eq(users.phoneNumber, phone)).limit(1);
   if (existing[0]?.phoneVerifiedAt) {
     throw new TRPCError({ code: "CONFLICT", message: "An account already uses that phone. Sign in instead." });
+  }
+  if (email) {
+    const emailUser = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+    if (emailUser[0] && emailUser[0].id !== existing[0]?.id) {
+      throw new TRPCError({ code: "CONFLICT", message: "An account already uses that email." });
+    }
   }
   const passwordHash = await hashPassword(input.password);
   const openId = `co_${createHash("sha256").update(phone).digest("hex").slice(0, 48)}`;
   let userId = existing[0]?.id;
   if (existing[0]) {
-    await db.update(users).set({ name: input.name.trim(), email: input.email?.trim() || null, passwordHash, loginMethod: "phone_password_otp" }).where(eq(users.id, existing[0].id));
+    await db.update(users).set({ name: input.name.trim(), email, passwordHash, loginMethod: "phone_password_otp" }).where(eq(users.id, existing[0].id));
   } else {
     const inserted = await db.insert(users).values({
       openId,
       name: input.name.trim(),
-      email: input.email?.trim() || null,
+      email,
       phoneNumber: phone,
       passwordHash,
       loginMethod: "phone_password_otp",
@@ -157,6 +164,31 @@ export async function startLogin(input: { phone: string; password: string }) {
   }
   await db.update(users).set({ failedLoginAttempts: 0, loginLockedUntil: null }).where(eq(users.id, user.id));
   return createChallenge(phone, "login", user.id);
+}
+
+export async function emailPasswordLogin(input: { email: string; password: string }) {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Account service is unavailable." });
+  const email = input.email.trim().toLowerCase();
+  const found = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  const user = found[0];
+  if (!user?.passwordHash || !user.phoneVerifiedAt) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Email or password is incorrect." });
+  }
+  if (user.loginLockedUntil && user.loginLockedUntil.getTime() > Date.now()) {
+    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many unsuccessful sign-in attempts. Try again later." });
+  }
+  if (!(await verifyPassword(input.password, user.passwordHash))) {
+    await db.update(users).set({
+      loginLockedUntil: sql<Date | null>`CASE WHEN ${users.failedLoginAttempts} + 1 >= ${LOGIN_MAX_FAILURES} THEN DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE) ELSE ${users.loginLockedUntil} END`,
+      failedLoginAttempts: sql<number>`${users.failedLoginAttempts} + 1`,
+    }).where(eq(users.id, user.id));
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Email or password is incorrect." });
+  }
+  await db.update(users).set({ failedLoginAttempts: 0, loginLockedUntil: null, lastSignedIn: new Date() }).where(eq(users.id, user.id));
+  const refreshed = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+  if (!refreshed[0]) throw new TRPCError({ code: "UNAUTHORIZED", message: "Account could not be loaded." });
+  return { user: refreshed[0], sessionToken: await createSessionToken(refreshed[0]) };
 }
 
 export async function completeOtp(challengeId: number, code: string) {

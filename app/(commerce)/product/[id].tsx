@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Button, C, Header, Notice, Page } from "@/components/camporder/ui";
 import { useCampOrderUser } from "@/hooks/use-camporder-user";
-import { assetUrl } from "@/lib/camporder/assets";
+import { assetSource } from "@/lib/camporder/assets";
 import { formatGhs, friendlyError } from "@/lib/camporder/format";
 import { trpc } from "@/lib/trpc";
 
@@ -31,7 +31,7 @@ export default function ProductScreen() {
   return <Page contentStyle={{ gap: 17 }}>
     <Header title="Item details" back right={<Pressable onPress={() => router.push("/(commerce)/cart")} style={{ padding: 9 }}><Ionicons name="bag-handle-outline" size={22} color={C.green} /></Pressable>} />
     <View style={{ height: 252, borderRadius: 23, overflow: "hidden", backgroundColor: C.sage, alignItems: "center", justifyContent: "center" }}>
-      {item.imageUrl ? <Image source={{ uri: assetUrl(item.imageUrl) }} contentFit="cover" style={{ width: "100%", height: "100%" }} /> : <Ionicons name="fast-food-outline" size={54} color={C.green} />}
+      {item.imageUrl ? <Image source={assetSource(item.imageUrl)} contentFit="cover" style={{ width: "100%", height: "100%" }} /> : <Ionicons name="fast-food-outline" size={54} color={C.green} />}
       {item.isSample ? <View style={{ position: "absolute", left: 14, top: 14, backgroundColor: C.paleMango, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 9 }}><Text style={{ color: "#87510B", fontSize: 10, fontWeight: "900" }}>SAMPLE LISTING</Text></View> : null}
     </View>
     <View style={{ gap: 8 }}><Text style={{ color: C.green, fontSize: 11, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1 }}>{item.category}</Text><Text style={{ color: C.ink, fontWeight: "900", fontSize: 26, letterSpacing: -0.7 }}>{item.name}</Text><Text style={{ color: C.green, fontWeight: "900", fontSize: 22 }}>{formatGhs(item.pricePesewas)}</Text><Text style={{ color: C.muted, fontSize: 14, lineHeight: 21 }}>{item.description}</Text></View>

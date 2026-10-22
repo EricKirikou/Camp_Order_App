@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Button, C, EmptyState, Header, Notice, Page } from "@/components/camporder/ui";
 import { useCampOrderUser } from "@/hooks/use-camporder-user";
-import { assetUrl } from "@/lib/camporder/assets";
+import { assetSource } from "@/lib/camporder/assets";
 import { formatGhs, friendlyError } from "@/lib/camporder/format";
 import { trpc } from "@/lib/trpc";
 
@@ -23,7 +23,7 @@ export default function CartScreen() {
     {error ? <Notice tone="error">{error}</Notice> : null}
     {cart.data?.items.length === 0 ? <EmptyState icon="basket-outline" title="Your cart is waiting" copy="Add a sample campus pick and it will show up here." action="Explore campus picks" onAction={() => router.replace("/(tabs)/explore")} /> : null}
     <View style={{ gap: 11 }}>{cart.data?.items.map(({ product, quantity }) => <View key={product.id} style={{ backgroundColor: C.white, borderRadius: 17, borderWidth: 1, borderColor: C.border, padding: 12, flexDirection: "row", alignItems: "center", gap: 12 }}>
-      <View style={{ width: 66, height: 66, backgroundColor: C.sage, borderRadius: 14, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>{product.imageUrl ? <Image source={{ uri: assetUrl(product.imageUrl) }} contentFit="cover" style={{ width: "100%", height: "100%" }} /> : <Ionicons name="fast-food-outline" size={24} color={C.green} />}</View>
+      <View style={{ width: 66, height: 66, backgroundColor: C.sage, borderRadius: 14, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>{product.imageUrl ? <Image source={assetSource(product.imageUrl)} contentFit="cover" style={{ width: "100%", height: "100%" }} /> : <Ionicons name="fast-food-outline" size={24} color={C.green} />}</View>
       <View style={{ flex: 1, gap: 4 }}><Text style={{ color: C.ink, fontWeight: "800", fontSize: 13 }} numberOfLines={1}>{product.name}</Text><Text style={{ color: C.green, fontWeight: "800", fontSize: 13 }}>{formatGhs(product.pricePesewas)}</Text><Text style={{ color: C.muted, fontSize: 9 }}>Sample listing</Text></View>
       <View style={{ alignItems: "center", gap: 7 }}><View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><Pressable onPress={() => update.mutate({ productId: product.id, quantity: Math.max(quantity - 1, 0) })} style={{ width: 28, height: 28, borderRadius: 10, backgroundColor: C.sage, alignItems: "center", justifyContent: "center" }}><Ionicons name={quantity === 1 ? "trash-outline" : "remove"} size={14} color={C.green} /></Pressable><Text style={{ color: C.ink, fontWeight: "800", minWidth: 15, textAlign: "center" }}>{quantity}</Text><Pressable onPress={() => update.mutate({ productId: product.id, quantity: Math.min(quantity + 1, 20) })} style={{ width: 28, height: 28, borderRadius: 10, backgroundColor: C.green, alignItems: "center", justifyContent: "center" }}><Ionicons name="add" size={16} color={C.white} /></Pressable></View><Text style={{ color: C.ink, fontSize: 10, fontWeight: "800" }}>{formatGhs(product.pricePesewas * quantity)}</Text></View>
     </View>)}</View>

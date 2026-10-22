@@ -1,9 +1,9 @@
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import type { ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { assetUrl } from "@/lib/camporder/assets";
+import { assetSource } from "@/lib/camporder/assets";
 import { formatGhs } from "@/lib/camporder/format";
 
 export const C = {
@@ -35,10 +35,10 @@ export function BrandMark({ size = 42, wordmark = true }: { size?: number; wordm
   </View>;
 }
 
-export function Header({ title, subtitle, right, back }: { title: string; subtitle?: string; right?: ReactNode; back?: boolean }) {
+export function Header({ title, subtitle, right, back, backFallback = "/(tabs)" }: { title: string; subtitle?: string; right?: ReactNode; back?: boolean; backFallback?: Href }) {
   const router = useRouter();
   return <View style={styles.header}>
-    {back && <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.headerBack}><Ionicons name="arrow-back" size={22} color={C.ink} /></Pressable>}
+    {back && <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.canGoBack() ? router.back() : router.replace(backFallback)} style={styles.headerBack}><Ionicons name="arrow-back" size={22} color={C.ink} /></Pressable>}
     <View style={{ flex: 1 }}><Text style={styles.headerTitle}>{title}</Text>{subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}</View>
     {right}
   </View>;
@@ -100,7 +100,7 @@ export function Notice({ children, tone = "sage" }: { children: ReactNode; tone?
 export function ProductCard({ product, onPress, onAdd }: { product: any; onPress?: () => void; onAdd?: () => void }) {
   return <Pressable onPress={onPress} style={({ pressed }) => [styles.productCard, { opacity: pressed ? 0.88 : 1 }]}>
     <View style={styles.productImageWrap}>
-      {product.imageUrl ? <Image source={{ uri: assetUrl(product.imageUrl) }} contentFit="cover" style={StyleSheet.absoluteFill} /> : <View style={[StyleSheet.absoluteFill, styles.productFallback]}><Ionicons name={product.category === "drinks" ? "cafe-outline" : product.category === "stationery" ? "book-outline" : "fast-food-outline"} size={32} color={C.green} /></View>}
+      {product.imageUrl ? <Image source={assetSource(product.imageUrl)} contentFit="cover" style={StyleSheet.absoluteFill} /> : <View style={[StyleSheet.absoluteFill, styles.productFallback]}><Ionicons name={product.category === "drinks" ? "cafe-outline" : product.category === "stationery" ? "book-outline" : "fast-food-outline"} size={32} color={C.green} /></View>}
       {product.isSample ? <View style={styles.sampleBadge}><Text style={styles.sampleBadgeText}>SAMPLE</Text></View> : null}
       {onAdd ? <Pressable onPress={(event) => { event.stopPropagation(); onAdd(); }} accessibilityRole="button" accessibilityLabel={`Add ${product.name}`} style={styles.addCircle}><Ionicons name="add" size={20} color={C.white} /></Pressable> : null}
     </View>

@@ -31,6 +31,7 @@ CampOrder is designed around the selected Ghanaian campus and the practical task
 - Home and Explore discovery with campus context, search, service shortcuts, vendor pages, and product details.
 - Marketplace categories for Food, Drinks, Groceries, Food Ingredients, Cook-a-Meal bundles, Health & Personal Care, Stationery, Fashion, Electronics, and other campus needs.
 - Persistent carts, checkout details, a hosted Paystack payment handoff, payment-return verification, order history, and backend-derived order status.
+- Phone/password/SMS account verification, email/password sign-in for verified accounts, and an administrator console for catalog CRUD.
 - Campus-service browsing, personal errand submission and tracking, and service booking flows for printing and binding, laundry, parcel pickup and delivery, room cleaning, repairs and tech help, and barber/beauty services.
 - A Ghana Cedi presentation layer backed by integer pesewas for stored prices and transaction amounts.
 
@@ -94,38 +95,112 @@ The Drizzle schema retains the starter `users` table and adds CampOrder data for
 
 ## Run the app
 
-### Managed project / Preview
+### Windows and PowerShell
 
-The project is initialized for Manus Mobile Dev. In the project directory, install from the checked-in lockfile and start the two listeners:
+Use Node.js **22.x**, the project's validated runtime, and run these commands from the repository root. This repository pins pnpm to `9.12.0` in `package.json`; Corepack reads that pin automatically.
 
-```bash
-pnpm install --frozen-lockfile
-pnpm dev
+```powershell
+node --version
+corepack --version
+corepack pnpm --version
+corepack pnpm install --frozen-lockfile
 ```
 
-`pnpm dev` runs the API on port `3000` and Expo Metro/Web on port `8081`. In the managed environment, the database connection, runtime URLs, and any provider credentials must be supplied through the project's protected configuration. Do not put those values in source code or commit a local environment file.
+If `corepack pnpm --version` reports `9.12.0`, pnpm is ready even if typing `pnpm` alone says it is not recognized. To make the plain `pnpm` command available, run `corepack enable` once, then open a new PowerShell window. If enabling the shims is blocked by permissions, keep using `corepack pnpm`.
 
-### Local development
+### Local web preview
 
-A local run needs Node.js, pnpm, and a reachable MySQL database. Provide the values listed under [Configuration and credentials](#configuration-and-credentials) through your local environment manager or an ignored `.env` file. The server reads `DATABASE_URL`; Drizzle commands use the same variable. The session-signing secret must be at least 32 characters. To run the API and Metro separately, use `pnpm dev:server` and `pnpm dev:metro` in separate terminals. The checked-in `dev:metro` script serves Expo Web on port `8081`; use the project's Expo Go connection instructions for device access.
+The web preview and API run as separate processes. The local web app needs the API base URL explicitly set because a browser on `localhost:8081` cannot infer that its API is on port `3000`.
 
-The current Manus Preview host and Expo Go QR/deep link are session/runtime-specific. Use the current **Connect Expo** information in the project dashboard; do not copy a temporary hostname into application source or this README.
+1. Create a local `.env` file in the repository root if one does not already exist. It is ignored by Git. At minimum, add a strong session secret and the local API URL:
+
+    ```env
+    CAMPORDER_SESSION_SECRET=replace-with-a-random-secret-at-least-32-characters
+    EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
+    ```
+
+  Generate a secret locally with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`, then put its output in `.env`. Keep the real value out of source control and chat.
+
+2. For database-backed features, install/start a local MySQL server, create a development database, and add its connection string to `.env`:
+
+    ```env
+    DATABASE_URL=mysql://USER:PASSWORD@localhost:3306/camporder
+    ```
+
+  URL-encode special characters in the username or password. The API process can start without a database, but signup, catalog, cart, orders, errands, bookings, and other persisted features require a reachable database and applied migrations.
+
+3. Apply the checked-in migrations to the development database. This changes that database, so verify `DATABASE_URL` first:
+
+    ```powershell
+    corepack pnpm exec drizzle-kit migrate
+    ```
+
+4. Optionally add the clearly marked sample campuses, vendors, products, and services to that same database:
+
+    ```powershell
+    corepack pnpm exec tsx server/seed.ts
+    ```
+
+  Seeding writes records. Skip this step if you do not want sample content.
+
+5. Start the API and web preview in two PowerShell terminals, both at the repository root:
+
+    ```powershell
+    corepack pnpm dev:server
+    ```
+
+    ```powershell
+    corepack pnpm dev:metro
+    ```
+
+    Open `http://localhost:8081`. The API health endpoint is `http://localhost:3000/api/health`. The two-terminal commands above work without a global pnpm shim. To use the combined `pnpm dev` command, first run `corepack enable`, open a new PowerShell window, and confirm `pnpm --version` reports `9.12.0`; the combined script calls `pnpm` from its child processes.
+
+The app can render without provider credentials, but OTP delivery and Paystack checkout will not work until their server-side credentials are configured. See [Configuration and credentials](#configuration-and-credentials). Never use live payment credentials for local development.
+
+### Run the native app with Expo Go
+
+Use this flow to open the React Native app on a physical Android phone. It is separate from the web preview above.
+
+1. Install Expo Go on the phone and connect the phone and development computer to the same Wi-Fi network.
+2. For backend-backed screens, set `EXPO_PUBLIC_API_BASE_URL` in the root `.env` to the computer's LAN IPv4 address, such as `http://192.168.1.25:3000`. Find the address with `ipconfig`. Do not use `localhost` or `127.0.0.1` for a phone: those addresses refer to the phone itself. The API must be running and allowed through the Windows firewall. Screens that do not use the API can be explored without starting the backend.
+3. Start the API in a PowerShell terminal at the repository root:
+
+  ```powershell
+  corepack pnpm dev:server
+  ```
+
+4. In a second terminal, start Expo's native development server:
+
+    ```powershell
+    corepack pnpm exec expo start --lan --port 8081
+    ```
+
+5. Open Expo Go, scan the QR code shown in the terminal, and wait for the bundle to load. If you change `.env`, stop and restart Expo so the updated public API URL is included in the app bundle.
+
+For an Android emulator, start an emulator from Android Studio first, then run `corepack pnpm android` from the repository root. The `android` script opens Expo and attempts to launch the app in the emulator. An emulator can use `http://10.0.2.2:3000` to reach the development computer's local API instead of the computer's LAN IP. Android Studio and its Android SDK must be installed and configured for this option.
+
+On Windows, use Expo Go on a physical iPhone for device testing; the iOS Simulator and local iOS native builds require macOS. Expo Go must support this project's Expo SDK version. If the installed Expo Go cannot load the project, use the managed Preview instructions or the development-build workflow supported by the project environment.
+
+### Managed Preview
+
+In the Manus managed environment, use the project's protected configuration and current **Connect Expo** details. Runtime URLs and QR/deep links are session-specific; do not copy temporary hostnames or credentials into source code or this README. The managed environment supplies its own runtime configuration, so do not substitute the local `.env` example above.
 
 ## Configuration and credentials
 
-Set credentials in the managed project's protected environment or a local secret manager. The following names describe the server/runtime contract; **never commit their values**.
+Set local development values in the ignored root `.env` file, or configure secrets through the managed project's protected environment. `.env` is loaded by both the API and Expo config. The following names describe the runtime contract; **never commit their values**.
 
 | Variable | Used for |
 | --- | --- |
-| `DATABASE_URL` | MySQL connection used by the API and Drizzle Kit. |
-| `CAMPORDER_SESSION_SECRET` or `MANUS_JWT_SECRET` | HMAC signing key for CampOrder session and OTP hashes; configure a secret of at least 32 characters. The managed project may provide `MANUS_JWT_SECRET`. |
+| `DATABASE_URL` | MySQL connection used by the API and Drizzle Kit. For Aiven, keep `ssl-mode=REQUIRED` in the URL. |
+| `DATABASE_SSL_CA_FILE` | Path to the downloaded Aiven project CA PEM file, required when `DATABASE_URL` uses `ssl-mode=REQUIRED`. The PEM file is ignored by Git. |
+| `CAMPORDER_SESSION_SECRET`, `MANUS_JWT_SECRET`, or `JWT_SECRET` | HMAC signing key for CampOrder sessions and OTP hashes; configure a secret of at least 32 characters. |
 | `AFRICASTALKING_USERNAME` | Africa's Talking account username. |
 | `AFRICASTALKING_API_KEY` | Server-only credential for sending OTP messages. |
 | `AFRICASTALKING_SENDER_ID` | Sender ID configured/approved for the provider and destination market. |
 | `PAYSTACK_SECRET_KEY` | Server-only Paystack key. Development rejects anything except an `sk_test_` key; production mode requires an `sk_live_` key. |
 | `AFRICASTALKING_API_URL` | Optional provider endpoint override; defaults to Africa's Talking's documented send endpoint. |
-| `EXPO_PUBLIC_API_BASE_URL` | Optional explicit public API origin for the mobile client. Prefer managed runtime configuration in Manus. |
-| `EXPO_WEB_PREVIEW_URL`, `EXPO_PACKAGER_PROXY_URL` | Runtime origins used by the managed Preview/client configuration. Do not hardcode temporary values. |
+| `EXPO_PUBLIC_API_BASE_URL` | API origin used by the client. Set to `http://localhost:3000` for local web, or a LAN-reachable API URL for a device on the local network. |
+| `EXPO_WEB_PREVIEW_URL`, `EXPO_PACKAGER_PROXY_URL` | Runtime origins used by managed Preview/client configuration. Do not hardcode temporary values. |
 
 Keep `.env`, `.env.*`, and all real credentials out of commits. `.env.example` may contain names and empty placeholders only. Never paste credentials into issues, chat, README examples, Git remotes, or shell commands that are retained in history. Provider API keys must remain on the server; they must never be exposed in the Expo bundle.
 
@@ -158,6 +233,17 @@ Prices are integer pesewas in storage (`pricePesewas`, `totalPesewas`, etc.) and
 - Session JWTs are signed and expire after 14 days. Native token storage uses Expo SecureStore. Web sessions use an HTTP-only cookie; the cookie is marked `Secure` and cross-site compatible when the public request is HTTPS.
 - Protected procedures scope cart, order, errand, booking, and payment lookups to the authenticated account. Checkout amounts are calculated from the database, not trusted from the client.
 - Tests use provider mocks. Do not run signup/login tests with live SMS credentials unless you intend to send real SMS messages.
+- Verified accounts can also sign in with email and password. Passwords use the same salted `scrypt` hash and account lockout as phone/password sign-in.
+
+### Admin setup
+
+Admin access is enforced on the server using the user's database role; hiding the admin screen in the app is not the security boundary. After applying migrations, provision the initial administrator from a trusted local terminal. Do not put an admin password in source code, chat, or shell history. Set `ADMIN_EMAIL` and enter a newly generated password through a protected secret manager or secure terminal prompt as `ADMIN_BOOTSTRAP_PASSWORD`, then run:
+
+```powershell
+corepack pnpm admin:bootstrap
+```
+
+The bootstrap script requires a password of at least 16 characters, stores only its `scrypt` hash, and assigns the `admin` role to that email. The Admin console can create, edit, and delete campuses, vendors, products, and services. Deletion is blocked by database foreign keys when referenced records exist. Removing a product image clears the database image URL; the current Forge storage integration has no remote file-delete operation, so it does not erase the stored object.
 
 ## Payments
 
@@ -215,7 +301,7 @@ A normal GitHub clone can use standard feature branches and pull requests. Befor
 - Development uses Paystack test mode. Live payment activation is a separate production configuration and operations task.
 - Errand/service requests are saved and trackable, but remain pending until an actual campus provider workflow is supplied.
 - The project has not been published from this repository and has no store-ready native build.
-- Catalog images currently use the managed project's `/manus-storage/` asset route. For deployment outside Manus, move or mirror those assets to a storage origin available to that deployment and update the image paths.
+- Primary onboarding, home, and sample product images are bundled under `assets/images/`. Legacy `/manus-storage/` image URLs are mapped to those local samples; any other managed-storage URLs require Forge storage configuration or migration to an accessible storage origin.
 
 ## Design reference and project documents
 

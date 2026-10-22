@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
-import { completeOtp, publicUser, resendOtp, setSession, startLogin, startSignup } from "../services/authentication";
+import { completeOtp, emailPasswordLogin, publicUser, resendOtp, setSession, startLogin, startSignup } from "../services/authentication";
 import { sessionCookieName, SESSION_MAX_AGE_MS } from "../services/security";
 import { getSessionCookieOptions } from "../_core/cookies";
 
@@ -17,6 +17,15 @@ export const authRouter = router({
     phone: z.string().min(8).max(32),
     password: z.string().min(1).max(128),
   })).mutation(({ input }) => startLogin(input)),
+
+  emailLogin: publicProcedure.input(z.object({
+    email: z.string().trim().email().max(320),
+    password: z.string().min(1).max(128),
+  })).mutation(async ({ input, ctx }) => {
+    const result = await emailPasswordLogin(input);
+    const nativeToken = await setSession(ctx.req, ctx.res, result.sessionToken);
+    return { user: publicUser(result.user), sessionToken: nativeToken };
+  }),
 
   resendOtp: publicProcedure.input(z.object({
     challengeId: z.number().int().positive(),

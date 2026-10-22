@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Button, C, Header, Notice, Page } from "@/components/camporder/ui";
 import { useCampOrderUser } from "@/hooks/use-camporder-user";
@@ -17,6 +17,12 @@ export default function CampusScreen() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (chosen !== null) return;
+    const defaultCampus = selected.campus ?? campuses.data?.find((item) => item.slug === "knust");
+    if (defaultCampus) setChosen(defaultCampus.id);
+  }, [campuses.data, chosen, selected.campus]);
+
   const continueToApp = async () => {
     const campus = campuses.data?.find((item) => item.id === chosen);
     if (!campus) { setError("Choose a campus to continue."); return; }
@@ -30,7 +36,7 @@ export default function CampusScreen() {
   };
 
   return <Page>
-    <Header title="Choose your campus" back />
+    <Header title="Choose your campus" back backFallback="/onboarding" />
     <View style={{ gap: 8 }}><Text style={{ color: C.ink, fontSize: 28, fontWeight: "900", letterSpacing: -0.8 }}>Where do you study?</Text><Text style={{ color: C.muted, fontSize: 14, lineHeight: 20 }}>We&apos;ll use this to show nearby sample listings and campus services.</Text></View>
     {error ? <Notice tone="error">{error}</Notice> : null}
     {campuses.isLoading ? <ActivityIndicator color={C.green} /> : campuses.isError ? <Notice tone="error">Campus list is unavailable right now. Try again shortly.</Notice> : <View style={{ gap: 10 }}>

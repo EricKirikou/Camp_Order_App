@@ -38,6 +38,7 @@ export default function ProfileScreen() {
       <Pressable onPress={() => router.push("/(auth)/campus")} style={{ borderRadius: 17, padding: 15, backgroundColor: C.white, borderWidth: 1, borderColor: C.border, flexDirection: "row", alignItems: "center", gap: 12 }}><View style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: C.sage, alignItems: "center", justifyContent: "center" }}><Ionicons name="location-outline" color={C.green} size={19} /></View><View style={{ flex: 1, gap: 3 }}><Text style={{ color: C.ink, fontWeight: "800" }}>My campus</Text><Text style={{ color: C.muted, fontSize: 12 }}>{selected.campus?.name ?? "Choose your campus"}</Text></View><Ionicons name="chevron-forward" color={C.muted} size={18} /></Pressable>
       <Button title="My orders" variant="outline" icon="receipt-outline" onPress={() => router.push("/(tabs)/orders")} />
       <Button title="Campus errands & services" variant="outline" icon="sparkles-outline" onPress={() => router.push("/(services)")} />
+      {user.role === "admin" ? <Button title="Admin console" variant="outline" icon="settings-outline" onPress={() => router.push("/admin")} /> : null}
       <Notice tone="mango">Listings and service types are sample data until a verified campus partner and fulfillment network are connected.</Notice>
       <Button title="Sign out" variant="quiet" onPress={doLogout} loading={logout.isPending} />
     </> : loading ? <Text style={{ color: C.muted }}>Checking your account…</Text> : <>

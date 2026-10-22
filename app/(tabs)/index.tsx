@@ -6,7 +6,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { BrandMark, C, Chip, Notice, ProductCard, SectionTitle } from "@/components/camporder/ui";
 import { useCampOrderUser } from "@/hooks/use-camporder-user";
 import { useSelectedCampus } from "@/hooks/use-selected-campus";
-import { assetUrl } from "@/lib/camporder/assets";
+import { assetSource, ASSET_PATHS } from "@/lib/camporder/assets";
 import { trpc } from "@/lib/trpc";
 
 const FALLBACK_CATEGORIES = [
@@ -57,7 +57,7 @@ export default function HomeScreen() {
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 28 }}>
       <View style={{ paddingHorizontal: 20, marginBottom: 17 }}>
         <Pressable onPress={() => router.push("/(services)")} style={{ height: 154, overflow: "hidden", borderRadius: 22, backgroundColor: C.green, padding: 18, justifyContent: "space-between" }}>
-          <Image source={{ uri: assetUrl("/manus-storage/async-images/p1ku05FZk2C3CZ929wSiYe/image-2.webp") }} contentFit="cover" style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: "55%", opacity: 0.68 }} />
+          <Image source={assetSource(ASSET_PATHS.campus)} contentFit="cover" style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: "55%", opacity: 0.68 }} />
           <View style={{ position: "absolute", right: "30%", top: 0, bottom: 0, width: 56, backgroundColor: C.green, opacity: 0.92, transform: [{ skewX: "-18deg" }] }} />
           <View style={{ gap: 7, width: "65%" }}><Text style={{ color: "#D5EBDC", fontSize: 10, fontWeight: "900", letterSpacing: 1.2 }}>CAMPUS NEEDS, ONE PLACE</Text><Text style={{ color: C.white, fontSize: 23, lineHeight: 27, fontWeight: "900", letterSpacing: -0.6 }}>From lunch to laundry.</Text><Text style={{ color: "#E8F2EB", fontSize: 12 }}>Let your campus day flow.</Text></View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><Text style={{ color: C.white, fontWeight: "800", fontSize: 12 }}>Explore services</Text><Ionicons name="arrow-forward" color={C.white} size={15} /></View>

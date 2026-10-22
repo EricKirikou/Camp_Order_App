@@ -3,38 +3,69 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import { BrandMark, Button, C } from "@/components/camporder/ui";
-import { assetUrl, ASSET_PATHS } from "@/lib/camporder/assets";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import { Button, C } from "@/components/camporder/ui";
+import { ASSET_PATHS } from "@/lib/camporder/assets";
 
 const SLIDES = [
-  { eyebrow: "MADE FOR CAMPUS DAYS", title: "Food, when you need it.", copy: "Find sample meals and local essentials from one simple campus marketplace.", image: ASSET_PATHS.campusDelivery, icon: "fast-food-outline" as const },
-  { eyebrow: "EVERYDAY ESSENTIALS", title: "The little things, sorted.", copy: "Browse drinks, groceries, study basics and student-friendly bundles.", image: ASSET_PATHS.essentials, icon: "basket-outline" as const },
-  { eyebrow: "MORE TIME FOR YOU", title: "Ask for a helping hand.", copy: "Request errands, a laundry booking, printing or other useful campus services.", image: ASSET_PATHS.jollof, icon: "sparkles-outline" as const },
+  { eyebrow: "DELIVERY, ON YOUR ROUTE", title: "Campus to your door.", copy: "Get sample campus picks moving, from nearby kitchens and shops to your day.", image: ASSET_PATHS.campusDelivery, icon: "bicycle-outline" as const },
+  { eyebrow: "GOOD FOOD, CLOSE BY", title: "Your next meal, sorted.", copy: "Find comforting meals and refreshing drinks between lectures and study sessions.", image: ASSET_PATHS.jollof, icon: "fast-food-outline" as const },
+  { eyebrow: "FRESH PICKS FOR YOUR DAY", title: "Stock up on campus.", copy: "Browse grocery staples and everyday essentials without leaving your campus routine.", image: ASSET_PATHS.essentials, icon: "basket-outline" as const },
 ];
 const ONBOARDING_KEY = "camporder.onboardingComplete";
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { height } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const slide = SLIDES[index];
   const continueTo = async (path: "/(tabs)" | "/(auth)/login" | "/(auth)/campus") => {
     setLoading(true);
-    await AsyncStorage.setItem(ONBOARDING_KEY, "1");
-    router.replace(path);
-    setLoading(false);
+    try {
+      await AsyncStorage.setItem(ONBOARDING_KEY, "1");
+      router.replace(path);
+    } finally {
+      setLoading(false);
+    }
   };
-  return <View style={{ flex: 1, backgroundColor: C.ivory, paddingHorizontal: 24, paddingTop: 22, paddingBottom: 18, justifyContent: "space-between" }}>
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}><BrandMark /><Pressable onPress={() => void continueTo("/(tabs)")} accessibilityRole="button"><Text style={{ color: C.green, fontWeight: "800", fontSize: 13 }}>Skip</Text></Pressable></View>
-    <View style={{ gap: 18 }}>
-      <View style={{ height: 300, borderRadius: 28, overflow: "hidden", backgroundColor: C.sage }}><Image source={{ uri: assetUrl(slide.image) }} contentFit="cover" style={{ width: "100%", height: "100%" }} /><View style={{ position: "absolute", top: 15, left: 15, backgroundColor: "rgba(255,253,248,0.95)", width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" }}><Ionicons name={slide.icon} size={23} color={C.green} /></View><View style={{ position: "absolute", bottom: 15, left: 15, borderRadius: 100, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: "rgba(13,112,72,0.93)" }}><Text style={{ color: C.white, fontWeight: "900", fontSize: 9, letterSpacing: 0.9 }}>SAMPLE CAMPUS PREVIEW</Text></View></View>
-      <View style={{ gap: 9 }}><Text style={{ color: C.green, letterSpacing: 1.2, fontSize: 10, fontWeight: "900" }}>{slide.eyebrow}</Text><Text style={{ color: C.ink, fontSize: 31, lineHeight: 36, letterSpacing: -1.1, fontWeight: "900" }}>{slide.title}</Text><Text style={{ color: C.muted, fontSize: 15, lineHeight: 22 }}>{slide.copy}</Text></View>
+  const imageHeight = Math.min(390, Math.max(250, height * 0.42));
+
+  return <View style={{ flex: 1, backgroundColor: C.ivory, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 18, justifyContent: "space-between" }}>
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 44 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Image source={ASSET_PATHS.favicon} contentFit="contain" style={{ width: 34, height: 34 }} />
+        <Text style={{ color: C.ink, fontSize: 19 }}><Text style={{ fontWeight: "400" }}>Camp</Text><Text style={{ fontWeight: "800" }}>Order</Text></Text>
+      </View>
+      <Text style={{ color: C.muted, fontSize: 12, fontWeight: "700" }}>{String(index + 1).padStart(2, "0")} / 03</Text>
+      <Pressable onPress={() => void continueTo("/(tabs)")} accessibilityRole="button" accessibilityLabel="Skip onboarding" hitSlop={10}><Text style={{ color: C.green, fontWeight: "800", fontSize: 13 }}>Skip</Text></Pressable>
     </View>
-    <View style={{ gap: 14 }}><View style={{ flexDirection: "row", gap: 6 }}>{SLIDES.map((_, dot) => <View key={dot} style={{ width: dot === index ? 23 : 7, height: 7, borderRadius: 8, backgroundColor: dot === index ? C.green : "#CBD8CE" }} />)}</View>
-      <Button title={index === SLIDES.length - 1 ? "Choose your campus" : "Continue"} icon="arrow-forward" onPress={() => index < SLIDES.length - 1 ? setIndex(index + 1) : void continueTo("/(auth)/campus")} loading={loading} />
-      <Pressable onPress={() => void continueTo("/(auth)/login")} style={{ paddingVertical: 7 }}><Text style={{ textAlign: "center", color: C.green, fontWeight: "800", fontSize: 13 }}>Already have an account? Sign in</Text></Pressable>
-      <Text style={{ textAlign: "center", color: C.muted, fontSize: 10, lineHeight: 15 }}>Campus listings are sample content; real availability depends on verified local partners.</Text>
+
+    <View style={{ gap: 20 }}>
+      <View style={{ height: imageHeight, borderRadius: 24, overflow: "hidden", backgroundColor: C.sage }}>
+        <Image source={slide.image} contentFit="cover" style={{ width: "100%", height: "100%" }} />
+        <View style={{ position: "absolute", inset: 0, backgroundColor: "rgba(12,34,24,0.12)" }} />
+        <View style={{ position: "absolute", left: 14, top: 14, width: 42, height: 42, borderRadius: 14, backgroundColor: C.ivory, alignItems: "center", justifyContent: "center" }}><Ionicons name={slide.icon} size={21} color={C.green} /></View>
+        <View style={{ position: "absolute", left: 14, right: 14, bottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <View style={{ backgroundColor: C.ivory, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 20 }}><Text style={{ color: C.greenDark, fontSize: 10, fontWeight: "900" }}>All locations around campus</Text></View>
+          <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: C.green, alignItems: "center", justifyContent: "center" }}><Ionicons name="arrow-forward" size={17} color={C.white} /></View>
+        </View>
+      </View>
+
+      <View style={{ gap: 9, minHeight: 119 }}>
+        <Text style={{ color: C.green, fontSize: 10, fontWeight: "900" }}>{slide.eyebrow}</Text>
+        <Text style={{ color: C.ink, fontSize: 30, lineHeight: 35, fontWeight: "900" }}>{slide.title}</Text>
+        <Text style={{ color: C.muted, fontSize: 14, lineHeight: 21 }}>{slide.copy}</Text>
+      </View>
+    </View>
+
+    <View style={{ gap: 13 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+        {SLIDES.map((item, dot) => <Pressable key={item.eyebrow} onPress={() => setIndex(dot)} accessibilityRole="button" accessibilityLabel={`Go to onboarding slide ${dot + 1}`} hitSlop={8} style={{ paddingVertical: 7 }}><View style={{ width: dot === index ? 25 : 7, height: 7, borderRadius: 8, backgroundColor: dot === index ? C.green : "#CBD8CE" }} /></Pressable>)}
+      </View>
+      <Button title={index === SLIDES.length - 1 ? "Get started" : "Continue"} icon="arrow-forward" onPress={() => index < SLIDES.length - 1 ? setIndex(index + 1) : void continueTo("/(tabs)")} loading={loading} />
+      <Pressable onPress={() => void continueTo("/(auth)/login")} style={{ paddingVertical: 4 }}><Text style={{ textAlign: "center", color: C.green, fontWeight: "800", fontSize: 13 }}>Already have an account? Sign in</Text></Pressable>
+      <Text style={{ textAlign: "center", color: C.muted, fontSize: 10, lineHeight: 15 }}>Campus images and listings are sample preview content.</Text>
     </View>
   </View>;
 }
