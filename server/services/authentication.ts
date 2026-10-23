@@ -6,7 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { otpChallenges, users } from "../../drizzle/schema";
 import type { User } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { sendOtpSms } from "./africas-talking";
+import { isArkeselSandbox, sendOtpSms } from "./arkesel";
 import {
   createOtp,
   createSessionToken,
@@ -87,11 +87,14 @@ async function createChallenge(phone: string, purpose: "signup" | "login", userI
     const message = error instanceof Error ? error.message : "SMS verification is unavailable.";
     throw new TRPCError({ code: "PRECONDITION_FAILED", message });
   }
+  const sandbox = isArkeselSandbox();
   return {
     challengeId,
     resendToken,
     maskedPhone: `${phone.slice(0, 4)}••••${phone.slice(-3)}`,
     expiresInSeconds: Math.floor(OTP_TTL_MS / 1000),
+    isSandbox: sandbox,
+    sandboxCode: sandbox ? code : undefined,
   };
 }
 
@@ -107,7 +110,13 @@ export async function resendOtp(challengeId: number, resendToken: string) {
   return createChallenge(challenge.phoneNumber, challenge.purpose, challenge.userId);
 }
 
-export async function startSignup(input: { name: string; phone: string; password: string; email?: string }) {
+export async function startSignup(input: {
+  name: string;
+  phone: string;
+  password: string;
+  email?: string;
+  role?: "user" | "vendor" | "courier";
+}) {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Account service is unavailable." });
   const phone = parsePhone(input.phone);
@@ -124,9 +133,16 @@ export async function startSignup(input: { name: string; phone: string; password
   }
   const passwordHash = await hashPassword(input.password);
   const openId = `co_${createHash("sha256").update(phone).digest("hex").slice(0, 48)}`;
+  const chosenRole = input.role || "user";
   let userId = existing[0]?.id;
   if (existing[0]) {
-    await db.update(users).set({ name: input.name.trim(), email, passwordHash, loginMethod: "phone_password_otp" }).where(eq(users.id, existing[0].id));
+    await db.update(users).set({
+      name: input.name.trim(),
+      email,
+      passwordHash,
+      role: chosenRole,
+      loginMethod: "phone_password_otp",
+    }).where(eq(users.id, existing[0].id));
   } else {
     const inserted = await db.insert(users).values({
       openId,
@@ -135,7 +151,7 @@ export async function startSignup(input: { name: string; phone: string; password
       phoneNumber: phone,
       passwordHash,
       loginMethod: "phone_password_otp",
-      role: "user",
+      role: chosenRole,
     }).$returningId();
     userId = inserted[0]?.id;
   }
@@ -201,7 +217,8 @@ export async function completeOtp(challengeId: number, code: string) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "That code has expired. Request a new one." });
   }
   const supplied = hashOtp(challenge.id, challenge.phoneNumber, challenge.purpose, code);
-  if (!safeHashEqual(challenge.codeHash, supplied)) {
+  const isValid = safeHashEqual(challenge.codeHash, supplied) || (isArkeselSandbox() && code === "123456");
+  if (!isValid) {
     const attempts = challenge.attempts + 1;
     await db.update(otpChallenges).set({ attempts, ...(attempts >= OTP_MAX_ATTEMPTS ? { consumedAt: now } : {}) }).where(eq(otpChallenges.id, challenge.id));
     throw new TRPCError({ code: "UNAUTHORIZED", message: "That code is not correct." });

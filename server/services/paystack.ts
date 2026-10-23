@@ -26,31 +26,58 @@ function secretKey(): string {
 }
 
 async function request<T>(path: string, init: RequestInit): Promise<T> {
-  try {
-    const response = await fetch(`https://api.paystack.co${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${secretKey()}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        ...init.headers,
-      },
-    });
-    const body = (await response.json()) as PaystackEnvelope<T>;
-    if (response.ok && body.status && body.data) {
-      return body.data;
+  const key = secretKey();
+  const isDev = process.env.NODE_ENV !== "production";
+  const isKnownPlaceholder = isDev && (key === "sk_test_camporder_test_secret_key_2024" || key.includes("placeholder") || key.includes("example"));
+
+  // If not a known placeholder, attempt real Paystack API call
+  if (!isKnownPlaceholder) {
+    try {
+      const response = await fetch(`https://api.paystack.co${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${key}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...init.headers,
+        },
+      });
+      const body = (await response.json()) as PaystackEnvelope<T>;
+      if (response.ok && body.status && body.data) {
+        return body.data;
+      }
+      // If we got an explicit error message from Paystack, log it or throw if not in dev test key fallback
+      if (!isDev) {
+        throw new Error(body.message || `Paystack error HTTP ${response.status}`);
+      }
+    } catch (err) {
+      if (!isDev) {
+        throw err instanceof Error ? err : new Error("Paystack network request failed");
+      }
     }
-  } catch {}
+  }
 
   // Sandbox simulation fallback in development if test key is a placeholder or Paystack API is unreachable
-  if (process.env.NODE_ENV !== "production" && secretKey().startsWith("sk_test_")) {
+  if (isDev && key.startsWith("sk_test_")) {
     if (path.startsWith("/transaction/initialize")) {
       const payload = init.body ? JSON.parse(init.body as string) : {};
       const ref = payload.reference || `camp_${Date.now()}`;
-      const cb = payload.callback_url || "/(commerce)/payment";
-      const sep = cb.includes("?") ? "&" : "?";
+      // Prefer the payload callback_url; fall back to EXPO preview or localhost
+      let cb = payload.callback_url || "";
+      let webOrigin = process.env.EXPO_WEB_PREVIEW_URL || process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:8081";
+      if (cb) {
+        try {
+          const parsed = new URL(cb);
+          webOrigin = parsed.origin;
+        } catch {}
+      } else {
+        cb = `${webOrigin}/payment`;
+      }
+      const amount = payload.amount || "0";
+      const email = payload.email || "";
+      const authUrl = `${webOrigin}/paystack-sandbox?reference=${encodeURIComponent(ref)}&amount=${encodeURIComponent(amount)}&email=${encodeURIComponent(email)}&callback_url=${encodeURIComponent(cb)}`;
       return {
-        authorization_url: `${cb}${sep}reference=${encodeURIComponent(ref)}&status=success`,
+        authorization_url: authUrl,
         access_code: `test_access_${Date.now()}`,
         reference: ref,
       } as unknown as T;
@@ -60,7 +87,7 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
       return {
         status: "success",
         reference: ref,
-        amount: 5000,
+        amount: 0,
         currency: "GHS",
         paid_at: new Date().toISOString(),
         customer: { email: "student@campus.edu" },

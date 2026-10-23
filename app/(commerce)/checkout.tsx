@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { Button, C, Field, Header, Notice, Page } from "@/components/camporder/ui";
@@ -13,10 +13,16 @@ export default function CheckoutScreen() {
   const cart = trpc.cart.get.useQuery(undefined, { enabled: Boolean(user), retry: false });
   const checkout = trpc.payments.startCheckout.useMutation();
   const [address, setAddress] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(user?.email || "");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [started, setStarted] = useState(false);
+
+  useEffect(() => {
+    if (user?.email && !email) {
+      setEmail(user.email);
+    }
+  }, [user?.email]);
 
   const pay = async () => {
     setError("");
@@ -28,7 +34,7 @@ export default function CheckoutScreen() {
         window.location.assign(result.authorizationUrl);
         return;
       }
-      const browserResult = await WebBrowser.openBrowserAsync(result.authorizationUrl);
+      const browserResult = await WebBrowser.openAuthSessionAsync(result.authorizationUrl);
       if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
         router.replace({ pathname: "/(commerce)/payment", params: { reference: result.reference } });
       }

@@ -24,7 +24,7 @@ import { formatGhs, friendlyError } from "@/lib/camporder/format";
 import { trpc } from "@/lib/trpc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Section = "dashboard" | "orders" | "products" | "vendors" | "customers" | "campuses" | "services" | "promotions" | "moderators" | "settings";
+type Section = "dashboard" | "orders" | "products" | "vendors" | "customers" | "campuses" | "services" | "promotions" | "moderators" | "audit" | "settings";
 type Draft = Record<string, string>;
 
 const NAV_ITEMS: Array<{ key: Section; label: string; icon: keyof typeof Ionicons.glyphMap; group?: string }> = [
@@ -37,6 +37,7 @@ const NAV_ITEMS: Array<{ key: Section; label: string; icon: keyof typeof Ionicon
   { key: "promotions", label: "Promotions & Ads", icon: "megaphone-outline" },
   { key: "services", label: "Campus Services", icon: "sparkles-outline" },
   { key: "moderators", label: "Moderators", icon: "shield-checkmark-outline", group: "Admin" },
+  { key: "audit", label: "Audit Trail", icon: "clipboard-outline", group: "Admin" },
   { key: "settings", label: "Settings", icon: "settings-outline", group: "Admin" },
 ];
 
@@ -114,6 +115,12 @@ export default function AdminScreen() {
   const [editingPromo, setEditingPromo] = useState<Draft | null>(null);
   const [promoError, setPromoError] = useState("");
 
+  // Order deletion & Audit trail state
+  const [orderToDelete, setOrderToDelete] = useState<any | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [orderDeleteError, setOrderDeleteError] = useState("");
+  const [selectedAuditSnapshot, setSelectedAuditSnapshot] = useState<any | null>(null);
+
   // ─── Queries ────────────────────────────────────────────────────────────────
   const analytics = trpc.admin.analytics.useQuery(undefined, { retry: false, refetchInterval: 15_000 });
   const campuses = trpc.admin.campuses.useQuery(undefined, { retry: false });
@@ -123,11 +130,14 @@ export default function AdminScreen() {
   const moderators = trpc.admin.moderators.useQuery(undefined, { retry: false });
   const paystackConfig = trpc.admin.getPaystackConfig.useQuery(undefined, { retry: false });
   const promotionsList = trpc.admin.promotions.useQuery(undefined, { retry: false });
+  const auditTrail = trpc.admin.auditTrail.useQuery(undefined, { retry: false, refetchInterval: 15_000 });
 
   // ─── Mutations ───────────────────────────────────────────────────────────────
   const logout = trpc.auth.logout.useMutation();
   const uploadImage = trpc.admin.uploadImage.useMutation();
   const updateOrderStatus = trpc.admin.updateOrderStatus.useMutation();
+  const deleteOrder = trpc.admin.deleteOrder.useMutation();
+  const restoreOrder = trpc.admin.restoreOrder.useMutation();
   const toggleVendorStatus = trpc.admin.toggleVendorStatus.useMutation();
   const toggleProductAvailability = trpc.admin.toggleProductAvailability.useMutation();
   const clearProductImage = trpc.admin.clearProductImage.useMutation();
@@ -161,6 +171,7 @@ export default function AdminScreen() {
       utils.admin.moderators.invalidate(),
       utils.admin.getPaystackConfig.invalidate(),
       utils.admin.promotions.invalidate(),
+      utils.admin.auditTrail.invalidate(),
       utils.catalog.campuses.invalidate(),
       utils.catalog.home.invalidate(),
       utils.catalog.listProducts.invalidate(),
@@ -538,8 +549,7 @@ export default function AdminScreen() {
                 <Text style={[s.tableTh, { width: 110 }]}>ORDER CODE</Text>
                 <Text style={[s.tableTh, { flex: 1 }]}>CUSTOMER / DESTINATION</Text>
                 <Text style={[s.tableTh, { width: 90 }]}>AMOUNT</Text>
-                <Text style={[s.tableTh, { width: 110 }]}>STATUS</Text>
-                <Text style={[s.tableTh, { width: 80, textAlign: "right" }]}>ACTION</Text>
+                <Text style={[s.tableTh, { width: 120, textAlign: "right" }]}>ACTIONS</Text>
               </View>
 
               {filteredOrders.length === 0 ? (
@@ -574,9 +584,19 @@ export default function AdminScreen() {
                           <Text style={[s.statusPillText, { color: statusMeta.color }]}>{statusMeta.label}</Text>
                         </View>
                       </View>
-                      <View style={{ width: 80, alignItems: "flex-end" }}>
+                      <View style={{ width: 120, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
                         <Pressable onPress={() => setSelectedOrderToUpdate(ord)} style={s.actionBtn}>
                           <Text style={s.actionBtnText}>Update</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => {
+                            setOrderToDelete(ord);
+                            setDeleteReason("");
+                            setOrderDeleteError("");
+                          }}
+                          style={[s.actionBtn, { backgroundColor: "#FEE2E2", borderColor: "#FCA5A5" }]}
+                        >
+                          <Ionicons name="trash-outline" size={13} color="#DC2626" />
                         </Pressable>
                       </View>
                     </View>
@@ -621,8 +641,7 @@ export default function AdminScreen() {
               <Text style={[s.tableTh, { width: 110 }]}>ORDER CODE</Text>
               <Text style={[s.tableTh, { flex: 1 }]}>CUSTOMER / DESTINATION</Text>
               <Text style={[s.tableTh, { width: 90 }]}>AMOUNT</Text>
-              <Text style={[s.tableTh, { width: 110 }]}>STATUS</Text>
-              <Text style={[s.tableTh, { width: 80, textAlign: "right" }]}>ACTION</Text>
+              <Text style={[s.tableTh, { width: 120, textAlign: "right" }]}>ACTIONS</Text>
             </View>
             {filteredOrders.length === 0 ? (
               <View style={{ padding: 48, alignItems: "center" }}>
@@ -650,9 +669,19 @@ export default function AdminScreen() {
                       <Text style={[s.statusPillText, { color: statusMeta.color }]}>{statusMeta.label}</Text>
                     </View>
                   </View>
-                  <View style={{ width: 80, alignItems: "flex-end" }}>
+                  <View style={{ width: 120, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
                     <Pressable onPress={() => setSelectedOrderToUpdate(ord)} style={s.actionBtn}>
                       <Text style={s.actionBtnText}>Update</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        setOrderToDelete(ord);
+                        setDeleteReason("");
+                        setOrderDeleteError("");
+                      }}
+                      style={[s.actionBtn, { backgroundColor: "#FEE2E2", borderColor: "#FCA5A5" }]}
+                    >
+                      <Ionicons name="trash-outline" size={13} color="#DC2626" />
                     </Pressable>
                   </View>
                 </View>
@@ -1079,6 +1108,106 @@ export default function AdminScreen() {
       );
     }
 
+    // AUDIT TRAIL
+    if (section === "audit") {
+      const logs = auditTrail.data ?? [];
+      return (
+        <View style={{ gap: 16 }}>
+          <View style={s.sectionHeaderRow}>
+            <View>
+              <Text style={s.pageTitle}>Order Audit Trail</Text>
+              <Text style={s.pageSubtitle}>Immutable compliance record of deleted orders, administrative actions, and snapshots</Text>
+            </View>
+            <Pressable onPress={() => void invalidate()} style={s.smallBtn}>
+              <Ionicons name="refresh-outline" size={14} color={C.green} />
+              <Text style={s.smallBtnText}>Refresh</Text>
+            </Pressable>
+          </View>
+
+          {/* Compliance banner */}
+          <View style={{ backgroundColor: "#F0FDF4", padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#BBF7D0", flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <Ionicons name="shield-checkmark" size={24} color="#16A34A" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: "800", color: "#14532D" }}>Permanent Audit Protection Active</Text>
+              <Text style={{ fontSize: 12, color: "#166534", marginTop: 2 }}>
+                Orders deleted by administrators are permanently preserved with full item and monetary snapshots for financial reconciliation and disputes.
+              </Text>
+            </View>
+          </View>
+
+          <View style={s.tableCard}>
+            <View style={s.tableHeaderRow}>
+              <Text style={[s.tableTh, { width: 90 }]}>ACTION</Text>
+              <Text style={[s.tableTh, { width: 140 }]}>ORDER CODE</Text>
+              <Text style={[s.tableTh, { flex: 1 }]}>PERFORMED BY</Text>
+              <Text style={[s.tableTh, { flex: 1 }]}>REASON / NOTES</Text>
+              <Text style={[s.tableTh, { width: 130 }]}>TIMESTAMP</Text>
+              <Text style={[s.tableTh, { width: 140, textAlign: "right" }]}>SNAPSHOT & RESTORE</Text>
+            </View>
+
+            {logs.length === 0 ? (
+              <View style={{ padding: 48, alignItems: "center", gap: 8 }}>
+                <Ionicons name="clipboard-outline" size={36} color="#D1D5DB" />
+                <Text style={{ fontSize: 14, fontWeight: "700", color: "#374151" }}>Audit trail is empty</Text>
+                <Text style={{ fontSize: 12, color: "#9CA3AF" }}>When an administrator deletes an order, its complete snapshot will appear here.</Text>
+              </View>
+            ) : (
+              logs.map((log: any) => {
+                const isDelete = log.action === "DELETED";
+                return (
+                  <View key={String(log.id)} style={s.tableRow}>
+                    <View style={{ width: 90 }}>
+                      <View style={[s.statusPill, { backgroundColor: isDelete ? "#FEE2E2" : "#DCFCE7" }]}>
+                        <Text style={[s.statusPillText, { color: isDelete ? "#B91C1C" : "#15803D" }]}>{log.action}</Text>
+                      </View>
+                    </View>
+                    <View style={{ width: 140 }}>
+                      <Text style={[s.orderCode, { fontWeight: "800" }]}>{log.orderCode}</Text>
+                      <Text style={{ fontSize: 10, color: "#9CA3AF" }}>ID #{log.orderId}</Text>
+                    </View>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: "#1E293B" }}>{log.actorName || "Admin"}</Text>
+                      <Text style={{ fontSize: 11, color: "#64748B" }}>{log.actorEmail || "System"}</Text>
+                    </View>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={{ fontSize: 12, color: "#334155" }}>{log.reason || "No reason given"}</Text>
+                    </View>
+                    <View style={{ width: 130 }}>
+                      <Text style={{ fontSize: 12, color: "#475569" }}>
+                        {new Date(log.createdAt).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: "#94A3B8" }}>
+                        {new Date(log.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </Text>
+                    </View>
+                    <View style={{ width: 140, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 6 }}>
+                      <Pressable
+                        onPress={() => setSelectedAuditSnapshot(log)}
+                        style={s.actionBtn}
+                      >
+                        <Text style={s.actionBtnText}>Snapshot</Text>
+                      </Pressable>
+                      {isDelete && (
+                        <Pressable
+                          onPress={async () => {
+                            await restoreOrder.mutateAsync({ id: log.orderId });
+                            await invalidate();
+                          }}
+                          style={[s.actionBtn, { borderColor: "#86EFAC", backgroundColor: "#F0FDF4" }]}
+                        >
+                          <Text style={[s.actionBtnText, { color: "#16A34A" }]}>Restore</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        </View>
+      );
+    }
+
     // EDIT FORM
     if (editing) return null;
 
@@ -1087,7 +1216,7 @@ export default function AdminScreen() {
 
   // ─── Edit Form (used for products/vendors/services/campuses) ─────────────────
   const renderEditForm = () => {
-    if (!editing || ["dashboard", "orders", "customers", "promotions", "moderators", "settings"].includes(section)) return null;
+    if (!editing || ["dashboard", "orders", "customers", "promotions", "moderators", "audit", "settings"].includes(section)) return null;
     return (
       <View style={[s.tableCard, { gap: 16 }]}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -1226,13 +1355,21 @@ export default function AdminScreen() {
                 <Pressable onPress={() => setSelectedOrderToUpdate(null)}><Ionicons name="close" size={24} color="#9CA3AF" /></Pressable>
               </View>
               <View style={{ gap: 8, marginTop: 8 }}>
-                {(["placed", "accepted", "preparing", "on_the_way", "completed", "cancelled"] as const).map((st) => {
-                  const meta = ORDER_STATUS_LABELS[st];
+                {(["payment_pending", "placed", "accepted", "preparing", "on_the_way", "completed", "cancelled"] as const).map((st) => {
+                  const meta = ORDER_STATUS_LABELS[st] ?? { label: st, color: "#6B7280" };
                   const isCurrent = selectedOrderToUpdate.status === st;
                   return (
                     <Pressable
                       key={st}
-                      onPress={async () => { await updateOrderStatus.mutateAsync({ id: selectedOrderToUpdate.id, status: st, paymentStatus: st === "completed" ? "paid" : undefined }); await invalidate(); setSelectedOrderToUpdate(null); }}
+                      onPress={async () => {
+                        await updateOrderStatus.mutateAsync({
+                          id: selectedOrderToUpdate.id,
+                          status: st,
+                          paymentStatus: st === "completed" ? "paid" : st === "payment_pending" ? "pending" : undefined,
+                        });
+                        await invalidate();
+                        setSelectedOrderToUpdate(null);
+                      }}
                       style={[s.statusSelectRow, isCurrent && { borderColor: C.green, backgroundColor: "#ECFDF5" }]}
                     >
                       <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: meta.color }} />
@@ -1334,6 +1471,131 @@ export default function AdminScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Delete Order Confirmation & Audit Modal */}
+      {orderToDelete && (
+        <Modal visible transparent animationType="fade">
+          <View style={s.overlay}>
+            <View style={[s.modalCard, { maxWidth: 460, width: "100%" }]}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View>
+                  <Text style={{ fontSize: 18, fontWeight: "900", color: "#DC2626" }}>Delete & Archive Order</Text>
+                  <Text style={{ fontSize: 13, color: "#9CA3AF" }}>Order #{orderToDelete.orderCode}</Text>
+                </View>
+                <Pressable onPress={() => setOrderToDelete(null)}>
+                  <Ionicons name="close" size={24} color="#9CA3AF" />
+                </Pressable>
+              </View>
+
+              <View style={{ backgroundColor: "#FEF2F2", padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#FECACA", gap: 4, marginTop: 4 }}>
+                <Text style={{ fontSize: 12, fontWeight: "800", color: "#991B1B" }}>Audit Trail Guarantee</Text>
+                <Text style={{ fontSize: 11, color: "#7F1D1D", lineHeight: 16 }}>
+                  Deleting this order removes it from active views, but permanently preserves a full snapshot in the Audit Trail for accounting, disputes, and compliance.
+                </Text>
+              </View>
+
+              <View style={{ backgroundColor: "#F8FAFC", padding: 12, borderRadius: 12, gap: 6 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={{ fontSize: 12, color: "#64748B" }}>Customer:</Text>
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#0F172A" }}>{orderToDelete.customerEmail}</Text>
+                </View>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={{ fontSize: 12, color: "#64748B" }}>Total Amount:</Text>
+                  <Text style={{ fontSize: 13, fontWeight: "900", color: C.green }}>{formatGhs(orderToDelete.totalPesewas)}</Text>
+                </View>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={{ fontSize: 12, color: "#64748B" }}>Payment Status:</Text>
+                  <Text style={{ fontSize: 12, fontWeight: "800", color: orderToDelete.paymentStatus === "paid" ? C.green : C.coral }}>
+                    {orderToDelete.paymentStatus?.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={{ gap: 6 }}>
+                <Text style={{ fontSize: 12, fontWeight: "800", color: "#374151" }}>Reason for Deletion (recorded in audit log):</Text>
+                <TextInput
+                  value={deleteReason}
+                  onChangeText={setDeleteReason}
+                  placeholder="e.g. Duplicate test order, customer requested cancellation, fraudulent..."
+                  placeholderTextColor="#9CA3AF"
+                  style={[s.tableSearch, { borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 10, height: 44, paddingHorizontal: 12, flex: 0 }]}
+                />
+              </View>
+
+              {orderDeleteError ? <Notice tone="error">{orderDeleteError}</Notice> : null}
+
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+                <Button title="Cancel" variant="outline" onPress={() => setOrderToDelete(null)} style={{ flex: 1 }} />
+                <Button
+                  title="Confirm Delete"
+                  variant="danger"
+                  loading={deleteOrder.isPending}
+                  onPress={async () => {
+                    setOrderDeleteError("");
+                    try {
+                      await deleteOrder.mutateAsync({
+                        id: orderToDelete.id,
+                        reason: deleteReason.trim() || undefined,
+                      });
+                      await invalidate();
+                      setOrderToDelete(null);
+                    } catch (err) {
+                      setOrderDeleteError(friendlyError(err, "Failed to delete order."));
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Audit Snapshot Modal */}
+      {selectedAuditSnapshot && (
+        <Modal visible transparent animationType="fade">
+          <View style={s.overlay}>
+            <View style={[s.modalCard, { maxWidth: 540, width: "100%" }]}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View>
+                  <Text style={{ fontSize: 18, fontWeight: "900", color: "#0F172A" }}>Audit Snapshot</Text>
+                  <Text style={{ fontSize: 12, color: "#64748B" }}>Order #{selectedAuditSnapshot.orderCode}</Text>
+                </View>
+                <Pressable onPress={() => setSelectedAuditSnapshot(null)}>
+                  <Ionicons name="close" size={24} color="#9CA3AF" />
+                </Pressable>
+              </View>
+
+              <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+                <View style={{ gap: 12 }}>
+                  <View style={{ backgroundColor: "#F1F5F9", padding: 12, borderRadius: 12, gap: 4 }}>
+                    <Text style={{ fontSize: 11, fontWeight: "800", color: "#475569" }}>AUDIT METADATA</Text>
+                    <Text style={{ fontSize: 12, color: "#1E293B" }}>Action: <Text style={{ fontWeight: "800" }}>{selectedAuditSnapshot.action}</Text></Text>
+                    <Text style={{ fontSize: 12, color: "#1E293B" }}>Actor: {selectedAuditSnapshot.actorName} ({selectedAuditSnapshot.actorEmail})</Text>
+                    <Text style={{ fontSize: 12, color: "#1E293B" }}>Date: {new Date(selectedAuditSnapshot.createdAt).toLocaleString()}</Text>
+                    <Text style={{ fontSize: 12, color: "#1E293B" }}>Reason: {selectedAuditSnapshot.reason || "None specified"}</Text>
+                  </View>
+
+                  <Text style={{ fontSize: 12, fontWeight: "800", color: "#334155" }}>ARCHIVED SNAPSHOT JSON</Text>
+                  <View style={{ backgroundColor: "#0F172A", padding: 14, borderRadius: 12 }}>
+                    <Text style={{ color: "#38BDF8", fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", fontSize: 11, lineHeight: 17 }}>
+                      {(() => {
+                        try {
+                          return JSON.stringify(JSON.parse(selectedAuditSnapshot.snapshot), null, 2);
+                        } catch {
+                          return selectedAuditSnapshot.snapshot;
+                        }
+                      })()}
+                    </Text>
+                  </View>
+                </View>
+              </ScrollView>
+
+              <Button title="Close" variant="outline" onPress={() => setSelectedAuditSnapshot(null)} />
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Sign Out Modal */}
       <Modal visible={showSignoutModal} transparent animationType="fade">

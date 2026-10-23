@@ -38,4 +38,23 @@ describe("Paystack GHS adapter", () => {
     expect(verifyPaystackSignature(rawBody, "f".repeat(128))).toBe(false);
     expect(verifyPaystackSignature(undefined, signature)).toBe(false);
   });
+
+  it("uses sandbox simulation fallback in development when placeholder key is used", async () => {
+    vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_camporder_test_secret_key_2024");
+    vi.stubEnv("NODE_ENV", "development");
+    const result = await initializeGhsPayment({
+      email: "test@camporder.gh",
+      amountPesewas: 5000,
+      reference: "camporder-retry-ref-123",
+      callbackUrl: "http://localhost:8081/payment",
+      metadata: { orderId: 99 },
+    });
+    expect(result.authorization_url).toContain("http://localhost:8081/paystack-sandbox");
+    expect(result.authorization_url).toContain("callback_url=http%3A%2F%2Flocalhost%3A8081%2Fpayment");
+    expect(result.reference).toBe("camporder-retry-ref-123");
+
+    const verifyResult = await verifyGhsPayment("camporder-retry-ref-123");
+    expect(verifyResult.status).toBe("success");
+    expect(verifyResult.reference).toBe("camporder-retry-ref-123");
+  });
 });

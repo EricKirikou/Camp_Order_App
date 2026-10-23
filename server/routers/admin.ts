@@ -1,10 +1,10 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import path from "node:path";
 import fs from "node:fs";
 import crypto, { randomUUID } from "node:crypto";
-import { campusServices, campuses, orders, products, promotions, users, vendors } from "../../drizzle/schema";
+import { campusServices, campuses, orderAuditLogs, orderItems, orders, products, promotions, users, vendors } from "../../drizzle/schema";
 import { adminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { hashPassword, normalizePhone } from "../services/security";
@@ -65,7 +65,7 @@ export const adminRouter = router({
   analytics: adminProcedure.query(async () => {
     const db = requireDb(await getDb());
     const [orderRows, productRows, vendorRows, campusRows, serviceRows] = await Promise.all([
-      db.select().from(orders).orderBy(desc(orders.createdAt)),
+      db.select().from(orders).where(isNull(orders.deletedAt)).orderBy(desc(orders.createdAt)),
       db.select().from(products).orderBy(products.name),
       db.select().from(vendors).orderBy(vendors.name),
       db.select().from(campuses).orderBy(campuses.name),
@@ -105,14 +105,19 @@ export const adminRouter = router({
       openVendors,
       totalCampuses: campusRows.length,
       totalServices: serviceRows.length,
-      recentOrders: orderRows.slice(0, 25),
+      recentOrders: orderRows.slice(0, 100),
     };
   }),
 
   // Orders Management (Bolt Food style)
-  orders: adminProcedure.query(async () => {
+  orders: adminProcedure.input(z.object({
+    showDeleted: z.boolean().optional(),
+  }).optional()).query(async ({ input }) => {
     const db = requireDb(await getDb());
-    return db.select().from(orders).orderBy(desc(orders.createdAt)).limit(100);
+    if (input?.showDeleted) {
+      return db.select().from(orders).where(isNotNull(orders.deletedAt)).orderBy(desc(orders.deletedAt)).limit(100);
+    }
+    return db.select().from(orders).where(isNull(orders.deletedAt)).orderBy(desc(orders.createdAt)).limit(100);
   }),
   updateOrderStatus: adminProcedure.input(z.object({
     id: z.number().int().positive(),
@@ -124,6 +129,74 @@ export const adminRouter = router({
     if (input.paymentStatus) updateData.paymentStatus = input.paymentStatus;
     await db.update(orders).set(updateData).where(eq(orders.id, input.id));
     return { success: true } as const;
+  }),
+  deleteOrder: adminProcedure.input(z.object({
+    id: z.number().int().positive(),
+    reason: z.string().trim().max(500).optional(),
+  })).mutation(async ({ input, ctx }) => {
+    const db = requireDb(await getDb());
+    const found = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
+    if (!found[0]) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
+    }
+    const order = found[0];
+    const items = await db.select().from(orderItems).where(eq(orderItems.orderId, input.id));
+
+    const snapshot = JSON.stringify({
+      order,
+      items,
+      deletedAt: new Date().toISOString(),
+      deletedBy: {
+        id: ctx.user.id,
+        name: ctx.user.name,
+        email: ctx.user.email,
+      },
+      reason: input.reason || "Deleted by administrator",
+    });
+
+    // Write to audit trail
+    await db.insert(orderAuditLogs).values({
+      orderId: order.id,
+      orderCode: order.orderCode,
+      action: "DELETED",
+      actorUserId: ctx.user.id,
+      actorName: ctx.user.name || "Administrator",
+      actorEmail: ctx.user.email || null,
+      reason: input.reason || "Deleted by administrator",
+      snapshot,
+    });
+
+    // Soft delete order
+    await db.update(orders).set({ deletedAt: new Date() }).where(eq(orders.id, input.id));
+    return { success: true } as const;
+  }),
+  restoreOrder: adminProcedure.input(z.object({
+    id: z.number().int().positive(),
+  })).mutation(async ({ input, ctx }) => {
+    const db = requireDb(await getDb());
+    const found = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
+    if (!found[0]) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
+    }
+    const order = found[0];
+
+    await db.insert(orderAuditLogs).values({
+      orderId: order.id,
+      orderCode: order.orderCode,
+      action: "RESTORED",
+      actorUserId: ctx.user.id,
+      actorName: ctx.user.name || "Administrator",
+      actorEmail: ctx.user.email || null,
+      reason: "Restored from audit trail",
+      snapshot: JSON.stringify({ orderId: order.id, orderCode: order.orderCode, restoredAt: new Date().toISOString() }),
+    });
+
+    await db.update(orders).set({ deletedAt: null }).where(eq(orders.id, input.id));
+    return { success: true } as const;
+  }),
+  auditTrail: adminProcedure.query(async () => {
+    const db = requireDb(await getDb());
+    return db.select().from(orderAuditLogs).orderBy(desc(orderAuditLogs.createdAt)).limit(150);
   }),
 
   // Image Upload & Removal (Jiji & Bolt Marketplace style)

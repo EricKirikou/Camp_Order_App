@@ -9,7 +9,7 @@ export type User = {
   phoneNumber: string | null;
   phoneVerified: boolean;
   campusId: number | null;
-  role: "user" | "admin" | "moderator";
+  role: "user" | "vendor" | "courier" | "admin" | "moderator";
   createdAt: Date | string;
 };
 

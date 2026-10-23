@@ -64,12 +64,12 @@ export function CartIconButton({ count = 0, onPress, style }: { count?: number; 
 }
 
 export function Button({ title, onPress, variant = "primary", disabled = false, loading = false, icon, style }: {
-  title: string; onPress: () => void; variant?: "primary" | "secondary" | "outline" | "quiet"; disabled?: boolean; loading?: boolean; icon?: keyof typeof Ionicons.glyphMap; style?: object;
+  title: string; onPress: () => void; variant?: "primary" | "secondary" | "outline" | "quiet" | "danger"; disabled?: boolean; loading?: boolean; icon?: keyof typeof Ionicons.glyphMap; style?: object;
 }) {
-  const color = variant === "primary" ? C.white : variant === "quiet" ? C.green : C.ink;
-  const backgroundColor = variant === "primary" ? C.green : variant === "secondary" ? C.sage : "transparent";
+  const color = variant === "primary" || variant === "danger" ? C.white : variant === "quiet" ? C.green : C.ink;
+  const backgroundColor = variant === "primary" ? C.green : variant === "danger" ? "#DC2626" : variant === "secondary" ? C.sage : "transparent";
   return <Pressable accessibilityRole="button" disabled={disabled || loading} onPress={onPress} style={({ pressed }) => [styles.button, { backgroundColor, borderColor: variant === "outline" ? C.border : "transparent", opacity: disabled ? 0.48 : pressed ? 0.86 : 1 }, style]}>
-    {loading ? <ActivityIndicator color={variant === "primary" ? C.white : C.green} /> : <>
+    {loading ? <ActivityIndicator color={variant === "primary" || variant === "danger" ? C.white : C.green} /> : <>
       {icon ? <Ionicons name={icon} size={18} color={color} style={{ marginRight: 8 }} /> : null}
       <Text style={[styles.buttonText, { color }]}>{title}</Text>
     </>}

@@ -71,7 +71,7 @@ export default function ProfileScreen() {
               <Text style={{ color: "#D9EEE2", fontSize: 13 }}>{user.phoneNumber || user.email}</Text>
               {user.phoneVerified ? (
                 <Text style={{ color: "#D9EEE2", fontSize: 11, fontWeight: "700" }}>
-                  ✓ Verified{user.role === "admin" ? " · Administrator" : ""}
+                  ✓ Verified{user.role === "admin" ? " · Administrator" : user.role === "vendor" ? " · Store Vendor" : user.role === "courier" ? " · Campus Courier" : user.role === "moderator" ? " · Moderator" : " · Student"}
                 </Text>
               ) : null}
             </View>
@@ -91,7 +91,7 @@ export default function ProfileScreen() {
           </Pressable>
           <Button title="My orders" variant="outline" icon="receipt-outline" onPress={() => router.push("/(tabs)/orders")} />
           <Button title="Campus errands & services" variant="outline" icon="sparkles-outline" onPress={() => router.push("/(services)")} />
-          {user.role === "admin" ? <Button title="Admin console" variant="outline" icon="settings-outline" onPress={() => router.push("/admin")} /> : null}
+          {user.role === "admin" || user.role === "moderator" ? <Button title="Admin console" variant="outline" icon="settings-outline" onPress={() => router.push("/admin")} /> : null}
           <Button title="Sign out" variant="quiet" onPress={() => setShowSignoutModal(true)} />
         </>
       ) : loading ? (

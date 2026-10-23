@@ -32,7 +32,15 @@ export default function LoginScreen() {
       }
       const result = await login.mutateAsync({ phone, password });
       await saveOtpResendToken(result.challengeId, result.resendToken);
-      router.push({ pathname: "/(auth)/otp", params: { challengeId: String(result.challengeId), phone: result.maskedPhone, purpose: "login" } });
+      router.push({
+        pathname: "/(auth)/otp",
+        params: {
+          challengeId: String(result.challengeId),
+          phone: result.maskedPhone,
+          purpose: "login",
+          ...(result.sandboxCode ? { sandboxCode: result.sandboxCode } : {}),
+        },
+      });
     } catch (err) {
       setError(friendlyError(err, "We couldn't sign you in."));
     }

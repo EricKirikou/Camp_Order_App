@@ -17,7 +17,7 @@ export const users = mysqlTable(
     name: text("name"),
     email: varchar("email", { length: 320 }).unique(),
     loginMethod: varchar("loginMethod", { length: 64 }),
-    role: mysqlEnum("role", ["user", "admin", "moderator"]).default("user").notNull(),
+    role: mysqlEnum("role", ["user", "vendor", "courier", "admin", "moderator"]).default("user").notNull(),
     phoneNumber: varchar("phoneNumber", { length: 20 }).unique(),
     passwordHash: varchar("passwordHash", { length: 255 }),
     phoneVerifiedAt: timestamp("phoneVerifiedAt"),
@@ -124,6 +124,7 @@ export const orders = mysqlTable("orders", {
   deliveryAddress: text("deliveryAddress").notNull(),
   customerEmail: varchar("customerEmail", { length: 320 }).notNull(),
   note: text("note"),
+  deletedAt: timestamp("deletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -135,6 +136,19 @@ export const orderItems = mysqlTable("order_items", {
   productName: varchar("productName", { length: 180 }).notNull(),
   unitPricePesewas: int("unitPricePesewas").notNull(),
   quantity: int("quantity").notNull(),
+});
+
+export const orderAuditLogs = mysqlTable("order_audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  orderId: int("orderId").notNull(),
+  orderCode: varchar("orderCode", { length: 32 }).notNull(),
+  action: varchar("action", { length: 50 }).notNull(),
+  actorUserId: int("actorUserId").references(() => users.id),
+  actorName: varchar("actorName", { length: 180 }),
+  actorEmail: varchar("actorEmail", { length: 320 }),
+  reason: text("reason"),
+  snapshot: text("snapshot").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export const campusServices = mysqlTable("campus_services", {
@@ -221,3 +235,4 @@ export type Campus = typeof campuses.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type Promotion = typeof promotions.$inferSelect;
+export type OrderAuditLog = typeof orderAuditLogs.$inferSelect;

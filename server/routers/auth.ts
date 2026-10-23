@@ -11,6 +11,7 @@ export const authRouter = router({
     phone: z.string().min(8).max(32),
     email: z.string().trim().email().max(320).optional().or(z.literal("")),
     password: z.string().min(8).max(128),
+    role: z.enum(["user", "vendor", "courier"]).optional(),
   })).mutation(({ input }) => startSignup(input)),
 
   startLogin: publicProcedure.input(z.object({

@@ -194,11 +194,11 @@ Set local development values in the ignored root `.env` file, or configure secre
 | `DATABASE_URL` | MySQL connection used by the API and Drizzle Kit. For Aiven, keep `ssl-mode=REQUIRED` in the URL. |
 | `DATABASE_SSL_CA_FILE` | Path to the downloaded Aiven project CA PEM file, required when `DATABASE_URL` uses `ssl-mode=REQUIRED`. The PEM file is ignored by Git. |
 | `CAMPORDER_SESSION_SECRET`, `MANUS_JWT_SECRET`, or `JWT_SECRET` | HMAC signing key for CampOrder sessions and OTP hashes; configure a secret of at least 32 characters. |
-| `AFRICASTALKING_USERNAME` | Africa's Talking account username. |
-| `AFRICASTALKING_API_KEY` | Server-only credential for sending OTP messages. |
-| `AFRICASTALKING_SENDER_ID` | Sender ID configured/approved for the provider and destination market. |
+| `ARKESEL_API_KEY` | Server-only credential for sending OTP SMS messages via Arkesel v2 API. |
+| `ARKESEL_SENDER_ID` | Registered Sender ID approved on your Arkesel dashboard (defaults to `CampOrder`). |
+| `ARKESEL_API_URL` | Optional provider endpoint override; defaults to `https://sms.arkesel.com/api/v2/sms/send`. |
+| `ARKESEL_SANDBOX` | Optional (`true`/`false`); set to `true` to test message delivery without deducting SMS balance. |
 | `PAYSTACK_SECRET_KEY` | Server-only Paystack key. Development rejects anything except an `sk_test_` key; production mode requires an `sk_live_` key. |
-| `AFRICASTALKING_API_URL` | Optional provider endpoint override; defaults to Africa's Talking's documented send endpoint. |
 | `EXPO_PUBLIC_API_BASE_URL` | API origin used by the client. Set to `http://localhost:3000` for local web, or a LAN-reachable API URL for a device on the local network. |
 | `EXPO_WEB_PREVIEW_URL`, `EXPO_PACKAGER_PROXY_URL` | Runtime origins used by managed Preview/client configuration. Do not hardcode temporary values. |
 
