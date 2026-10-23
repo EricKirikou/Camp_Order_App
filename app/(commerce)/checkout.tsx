@@ -42,13 +42,13 @@ export default function CheckoutScreen() {
   return <Page>
     <Header title="Checkout" subtitle="Pay securely with Paystack" back />
     <View style={{ gap: 7 }}><Text style={{ color: C.ink, fontSize: 25, fontWeight: "900", letterSpacing: -0.7 }}>Almost there.</Text><Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>Enter a campus delivery point and an email for Paystack receipts.</Text></View>
-    {cart.data?.items.length ? <View style={{ backgroundColor: C.sage, padding: 15, borderRadius: 16, gap: 7 }}><Text style={{ color: C.ink, fontWeight: "800" }}>{cart.data.itemCount} sample item{cart.data.itemCount === 1 ? "" : "s"}</Text><View style={{ flexDirection: "row", justifyContent: "space-between" }}><Text style={{ color: C.muted }}>Estimated total incl. delivery</Text><Text style={{ color: C.green, fontWeight: "900" }}>{formatGhs(cart.data.subtotalPesewas + 500)}</Text></View></View> : null}
+    {cart.data?.items.length ? <View style={{ backgroundColor: C.sage, padding: 15, borderRadius: 16, gap: 7 }}><Text style={{ color: C.ink, fontWeight: "800" }}>{cart.data.itemCount} item{cart.data.itemCount === 1 ? "" : "s"}</Text><View style={{ flexDirection: "row", justifyContent: "space-between" }}><Text style={{ color: C.muted }}>Estimated total incl. delivery</Text><Text style={{ color: C.green, fontWeight: "900" }}>{formatGhs(cart.data.subtotalPesewas + 500)}</Text></View></View> : null}
     <View style={{ gap: 14 }}>
       <Field label="Campus / hostel delivery point" value={address} onChangeText={setAddress} placeholder="Hall, block and room number" autoCapitalize="sentences" />
       <Field label="Email for payment receipt" value={email} onChangeText={setEmail} placeholder="name@example.com" keyboardType="email-address" />
       <Field label="Note for the seller (optional)" value={note} onChangeText={setNote} placeholder="Any useful detail" multiline autoCapitalize="sentences" />
     </View>
-    <Notice tone="mango">This checkout is configured for Paystack test mode. No live charge will be made during development. Sample merchants are not verified for fulfillment.</Notice>
+    <Notice tone="mango">Payments are processed securely via Paystack.</Notice>
     {error ? <Notice tone="error">{error}</Notice> : null}
     {started ? <Notice>Your checkout was opened. Return here after the secure payment step to check the confirmed order status.</Notice> : null}
     <Button title="Continue to Paystack" icon="lock-closed-outline" onPress={() => void pay()} loading={checkout.isPending} disabled={address.trim().length < 4 || !/^\S+@\S+\.\S+$/.test(email)} />

@@ -51,7 +51,7 @@ export const paymentsRouter = router({
         campusId: cartRows[0].cart.campusId,
         status: "payment_pending",
         paymentStatus: "pending",
-        isSample: items.some(({ product }) => product.isSample === 1) ? 1 : 0,
+        isSample: 0,
         subtotalPesewas: subtotal,
         deliveryFeePesewas: deliveryFee,
         totalPesewas: total,

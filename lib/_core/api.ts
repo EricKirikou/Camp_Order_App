@@ -107,11 +107,13 @@ export async function logout(): Promise<void> {
 // Get current authenticated user (web uses cookie-based auth)
 export async function getMe(): Promise<{
   id: number;
-  openId: string;
   name: string | null;
   email: string | null;
-  loginMethod: string | null;
-  lastSignedIn: string;
+  phoneNumber: string | null;
+  phoneVerified: boolean;
+  campusId: number | null;
+  role: "user" | "admin";
+  createdAt: string;
 } | null> {
   try {
     const result = await apiCall<{ user: any }>("/api/auth/me");

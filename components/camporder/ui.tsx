@@ -44,6 +44,25 @@ export function Header({ title, subtitle, right, back, backFallback = "/(tabs)" 
   </View>;
 }
 
+export function CartIconButton({ count = 0, onPress, style }: { count?: number; onPress?: () => void; style?: object }) {
+  const router = useRouter();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Cart with ${count} items`}
+      onPress={onPress ?? (() => router.push("/(commerce)/cart"))}
+      style={[styles.cartIconButton, style]}
+    >
+      <Ionicons name="bag-handle-outline" size={20} color={C.ink} />
+      {count > 0 ? (
+        <View style={styles.cartBadge}>
+          <Text style={styles.cartBadgeText}>{count > 99 ? "99+" : count}</Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
 export function Button({ title, onPress, variant = "primary", disabled = false, loading = false, icon, style }: {
   title: string; onPress: () => void; variant?: "primary" | "secondary" | "outline" | "quiet"; disabled?: boolean; loading?: boolean; icon?: keyof typeof Ionicons.glyphMap; style?: object;
 }) {
@@ -101,7 +120,6 @@ export function ProductCard({ product, onPress, onAdd }: { product: any; onPress
   return <Pressable onPress={onPress} style={({ pressed }) => [styles.productCard, { opacity: pressed ? 0.88 : 1 }]}>
     <View style={styles.productImageWrap}>
       {product.imageUrl ? <Image source={assetSource(product.imageUrl)} contentFit="cover" style={StyleSheet.absoluteFill} /> : <View style={[StyleSheet.absoluteFill, styles.productFallback]}><Ionicons name={product.category === "drinks" ? "cafe-outline" : product.category === "stationery" ? "book-outline" : "fast-food-outline"} size={32} color={C.green} /></View>}
-      {product.isSample ? <View style={styles.sampleBadge}><Text style={styles.sampleBadgeText}>SAMPLE</Text></View> : null}
       {onAdd ? <Pressable onPress={(event) => { event.stopPropagation(); onAdd(); }} accessibilityRole="button" accessibilityLabel={`Add ${product.name}`} style={styles.addCircle}><Ionicons name="add" size={20} color={C.white} /></Pressable> : null}
     </View>
     <View style={styles.productInfo}>
@@ -148,8 +166,6 @@ const styles = StyleSheet.create({
   productCard: { width: 174, backgroundColor: C.white, borderRadius: 20, overflow: "hidden", borderWidth: 1, borderColor: C.border },
   productImageWrap: { height: 132, backgroundColor: C.sage, position: "relative" },
   productFallback: { alignItems: "center", justifyContent: "center", backgroundColor: C.sage },
-  sampleBadge: { position: "absolute", top: 9, left: 9, backgroundColor: "rgba(255,253,248,0.93)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7 },
-  sampleBadgeText: { color: C.greenDark, fontSize: 8, fontWeight: "900", letterSpacing: 0.7 },
   addCircle: { position: "absolute", bottom: 9, right: 9, width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: C.green },
   productInfo: { padding: 12, gap: 4 },
   productName: { color: C.ink, fontSize: 13, fontWeight: "800" },
@@ -159,4 +175,34 @@ const styles = StyleSheet.create({
   emptyIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: C.sage, alignItems: "center", justifyContent: "center", marginBottom: 11 },
   emptyTitle: { fontSize: 16, color: C.ink, fontWeight: "800", textAlign: "center" },
   emptyCopy: { fontSize: 13, lineHeight: 19, color: C.muted, textAlign: "center", marginTop: 6 },
+  cartIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  cartBadge: {
+    position: "absolute",
+    right: -4,
+    top: -4,
+    minWidth: 19,
+    height: 19,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: C.coral,
+    borderWidth: 1.5,
+    borderColor: C.white,
+  },
+  cartBadgeText: {
+    color: C.white,
+    fontSize: 9,
+    fontWeight: "900",
+  },
 });

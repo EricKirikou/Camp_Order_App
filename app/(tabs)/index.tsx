@@ -75,16 +75,16 @@ export default function HomeScreen() {
 
       <View style={{ paddingLeft: 20, marginBottom: 18 }}>
         <SectionTitle title="Shops around campus" action="Explore" onAction={() => router.push("/(tabs)/explore")} />
-        <Text style={{ color: C.muted, fontSize: 11, marginTop: 4, marginBottom: 10 }}>Sample sellers · not verified</Text>
+        <Text style={{ color: C.muted, fontSize: 11, marginTop: 4, marginBottom: 10 }}>Campus merchants & kitchens</Text>
         <View style={{ flexDirection: "row", gap: 9, paddingRight: 20 }}>
-          {(home.data?.vendors ?? []).slice(0, 2).map((vendor) => <Pressable key={vendor.id} onPress={() => router.push({ pathname: "/(commerce)/vendor/[id]", params: { id: String(vendor.id) } })} style={{ flex: 1, padding: 12, borderRadius: 16, backgroundColor: C.white, borderWidth: 1, borderColor: C.border, gap: 7 }}><View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: C.sage, alignItems: "center", justifyContent: "center" }}><Ionicons name="storefront-outline" size={17} color={C.green} /></View><Text style={{ color: C.ink, fontWeight: "800", fontSize: 12 }} numberOfLines={1}>{vendor.name}</Text><Text style={{ color: C.muted, fontSize: 10 }}>Sample · {vendor.etaMin} min estimate</Text></Pressable>)}
+          {(home.data?.vendors ?? []).slice(0, 2).map((vendor) => <Pressable key={vendor.id} onPress={() => router.push({ pathname: "/(commerce)/vendor/[id]", params: { id: String(vendor.id) } })} style={{ flex: 1, padding: 12, borderRadius: 16, backgroundColor: C.white, borderWidth: 1, borderColor: C.border, gap: 7 }}><View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: C.sage, alignItems: "center", justifyContent: "center" }}><Ionicons name="storefront-outline" size={17} color={C.green} /></View><Text style={{ color: C.ink, fontWeight: "800", fontSize: 12 }} numberOfLines={1}>{vendor.name}</Text><Text style={{ color: C.muted, fontSize: 10 }}>~{vendor.etaMin} min delivery</Text></Pressable>)}
         </View>
       </View>
 
       <View style={{ paddingLeft: 20, flex: 1 }}>
         <SectionTitle title="Campus favourites" action="View all" onAction={() => categoryPress("all")} />
-        <Text style={{ color: C.muted, fontSize: 11, marginTop: 4, marginBottom: 11 }}>Sample listings · availability not verified</Text>
-        {home.isLoading ? <Text style={{ color: C.muted, fontSize: 13 }}>Loading campus picks…</Text> : home.isError ? <Notice tone="error">Marketplace is temporarily unavailable.</Notice> : products.length ? <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, paddingRight: 20, paddingBottom: 22 }}>{products.slice(0, 4).map((product) => <ProductCard key={product.id} product={product} onPress={() => router.push({ pathname: "/(commerce)/product/[id]", params: { id: String(product.id) } })} onAdd={() => user ? router.push({ pathname: "/(commerce)/product/[id]", params: { id: String(product.id), add: "1" } }) : router.push("/(auth)/login")} />)}</View> : <Notice tone="mango">No sample items yet. Run the CampOrder seed task to load preview listings.</Notice>}
+        <Text style={{ color: C.muted, fontSize: 11, marginTop: 4, marginBottom: 11 }}>Popular picks on your campus</Text>
+        {home.isLoading ? <Text style={{ color: C.muted, fontSize: 13 }}>Loading campus picks…</Text> : home.isError ? <Notice tone="error">Marketplace is temporarily unavailable.</Notice> : products.length ? <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, paddingRight: 20, paddingBottom: 22 }}>{products.slice(0, 4).map((product) => <ProductCard key={product.id} product={product} onPress={() => router.push({ pathname: "/(commerce)/product/[id]", params: { id: String(product.id) } })} onAdd={() => user ? router.push({ pathname: "/(commerce)/product/[id]", params: { id: String(product.id), add: "1" } }) : router.push("/(auth)/login")} />)}</View> : <Notice tone="mango">No products available for this campus yet.</Notice>}
       </View>
     </ScrollView>
   </View>;

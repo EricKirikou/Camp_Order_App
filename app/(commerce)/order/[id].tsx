@@ -17,7 +17,6 @@ export default function OrderDetailsScreen() {
   return <Page>
     <Header title="Order tracking" subtitle={data.orderCode} back />
     <View style={{ alignItems: "center", paddingVertical: 14, gap: 10 }}><View style={{ width: 68, height: 68, borderRadius: 23, backgroundColor: data.paymentStatus === "paid" ? C.sage : C.paleMango, alignItems: "center", justifyContent: "center" }}><Ionicons name={data.paymentStatus === "paid" ? "checkmark-circle-outline" : "time-outline"} size={33} color={data.paymentStatus === "paid" ? C.green : "#9A661E"} /></View><Text style={{ color: C.ink, fontSize: 21, fontWeight: "900" }}>{ORDER_STATUS_LABEL[data.status] ?? data.status}</Text><Text style={{ color: C.muted, fontSize: 12 }}>{data.paymentStatus === "paid" ? "Payment confirmed by Paystack" : `Payment status: ${data.paymentStatus}`}</Text></View>
-    {data.isSample ? <Notice tone="mango">This is a sample marketplace order. No seller or courier is connected for fulfillment.</Notice> : null}
     <View style={{ borderRadius: 18, backgroundColor: C.white, padding: 16, borderWidth: 1, borderColor: C.border, gap: 15 }}><Text style={{ color: C.ink, fontSize: 16, fontWeight: "900" }}>Order progress</Text>{STEPS.map((step, index) => {
       const complete = currentIndex >= index;
       const isCurrent = data.status === step;

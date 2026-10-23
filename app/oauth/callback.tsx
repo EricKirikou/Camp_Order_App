@@ -39,11 +39,13 @@ export default function OAuthCallback() {
               const userData = JSON.parse(userJson);
               const userInfo: Auth.User = {
                 id: userData.id,
-                openId: userData.openId,
                 name: userData.name,
                 email: userData.email,
-                loginMethod: userData.loginMethod,
-                lastSignedIn: new Date(userData.lastSignedIn || Date.now()),
+                phoneNumber: userData.phoneNumber ?? null,
+                phoneVerified: userData.phoneVerified ?? false,
+                campusId: userData.campusId ?? null,
+                role: userData.role ?? "user",
+                createdAt: userData.createdAt ?? new Date().toISOString(),
               };
               await Auth.setUserInfo(userInfo);
               console.log("[OAuth] User info stored");
@@ -169,11 +171,13 @@ export default function OAuthCallback() {
             console.log("[OAuth] User data received");
             const userInfo: Auth.User = {
               id: result.user.id,
-              openId: result.user.openId,
               name: result.user.name,
               email: result.user.email,
-              loginMethod: result.user.loginMethod,
-              lastSignedIn: new Date(result.user.lastSignedIn || Date.now()),
+              phoneNumber: result.user.phoneNumber ?? null,
+              phoneVerified: result.user.phoneVerified ?? false,
+              campusId: result.user.campusId ?? null,
+              role: result.user.role ?? "user",
+              createdAt: result.user.createdAt ?? new Date().toISOString(),
             };
             await Auth.setUserInfo(userInfo);
             console.log("[OAuth] User info stored");

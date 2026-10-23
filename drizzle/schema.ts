@@ -17,7 +17,7 @@ export const users = mysqlTable(
     name: text("name"),
     email: varchar("email", { length: 320 }).unique(),
     loginMethod: varchar("loginMethod", { length: 64 }),
-    role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+    role: mysqlEnum("role", ["user", "admin", "moderator"]).default("user").notNull(),
     phoneNumber: varchar("phoneNumber", { length: 20 }).unique(),
     passwordHash: varchar("passwordHash", { length: 255 }),
     phoneVerifiedAt: timestamp("phoneVerifiedAt"),
@@ -51,7 +51,7 @@ export const campuses = mysqlTable("campuses", {
   city: varchar("city", { length: 100 }).notNull(),
   region: varchar("region", { length: 100 }).notNull(),
   description: text("description"),
-  isSample: int("isSample").default(1).notNull(),
+  isSample: int("isSample").default(0).notNull(),
   isActive: int("isActive").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -69,7 +69,7 @@ export const vendors = mysqlTable(
     etaMin: int("etaMin").default(25).notNull(),
     deliveryFeePesewas: int("deliveryFeePesewas").default(0).notNull(),
     isOpen: int("isOpen").default(1).notNull(),
-    isSample: int("isSample").default(1).notNull(),
+    isSample: int("isSample").default(0).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
 );
@@ -85,7 +85,7 @@ export const products = mysqlTable("products", {
   imageUrl: varchar("imageUrl", { length: 512 }),
   badge: varchar("badge", { length: 80 }),
   isAvailable: int("isAvailable").default(1).notNull(),
-  isSample: int("isSample").default(1).notNull(),
+  isSample: int("isSample").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -145,7 +145,7 @@ export const campusServices = mysqlTable("campus_services", {
   description: text("description"),
   startingPricePesewas: int("startingPricePesewas").default(0).notNull(),
   isActive: int("isActive").default(1).notNull(),
-  isSample: int("isSample").default(1).notNull(),
+  isSample: int("isSample").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -196,8 +196,28 @@ export const paymentWebhookEvents = mysqlTable("payment_webhook_events", {
   processedAt: timestamp("processedAt").defaultNow().notNull(),
 });
 
+export const promotions = mysqlTable("promotions", {
+  id: int("id").autoincrement().primaryKey(),
+  type: mysqlEnum("type", ["product_promo", "banner_ad", "featured_vendor"]).default("banner_ad").notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  subtitle: text("subtitle"),
+  ctaLabel: varchar("ctaLabel", { length: 80 }),
+  ctaTarget: varchar("ctaTarget", { length: 255 }),
+  imageUrl: varchar("imageUrl", { length: 512 }),
+  badgeText: varchar("badgeText", { length: 60 }),
+  productId: int("productId").references(() => products.id),
+  vendorId: int("vendorId").references(() => vendors.id),
+  isActive: int("isActive").default(1).notNull(),
+  startsAt: timestamp("startsAt"),
+  endsAt: timestamp("endsAt"),
+  priority: int("priority").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Campus = typeof campuses.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Order = typeof orders.$inferSelect;
+export type Promotion = typeof promotions.$inferSelect;

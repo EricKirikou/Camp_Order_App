@@ -25,6 +25,7 @@ export default function LoginScreen() {
       if (mode === "email") {
         const result = await emailLogin.mutateAsync({ email, password });
         if (result.sessionToken) await Auth.setSessionToken(result.sessionToken);
+        if (result.user) await Auth.setUserInfo(result.user);
         await utils.auth.me.invalidate();
         router.replace("/(tabs)");
         return;

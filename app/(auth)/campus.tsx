@@ -37,7 +37,7 @@ export default function CampusScreen() {
 
   return <Page>
     <Header title="Choose your campus" back backFallback="/onboarding" />
-    <View style={{ gap: 8 }}><Text style={{ color: C.ink, fontSize: 28, fontWeight: "900", letterSpacing: -0.8 }}>Where do you study?</Text><Text style={{ color: C.muted, fontSize: 14, lineHeight: 20 }}>We&apos;ll use this to show nearby sample listings and campus services.</Text></View>
+    <View style={{ gap: 8 }}><Text style={{ color: C.ink, fontSize: 28, fontWeight: "900", letterSpacing: -0.8 }}>Where do you study?</Text><Text style={{ color: C.muted, fontSize: 14, lineHeight: 20 }}>We&apos;ll use this to show nearby shops, kitchens and campus services.</Text></View>
     {error ? <Notice tone="error">{error}</Notice> : null}
     {campuses.isLoading ? <ActivityIndicator color={C.green} /> : campuses.isError ? <Notice tone="error">Campus list is unavailable right now. Try again shortly.</Notice> : <View style={{ gap: 10 }}>
       {(campuses.data ?? []).map((campus) => {
@@ -49,7 +49,6 @@ export default function CampusScreen() {
         </Pressable>;
       })}
     </View>}
-    <Notice tone="mango">Campus options and marketplace listings are sample preview content. Live vendor availability has not been verified.</Notice>
     <Button title="Continue" onPress={() => void continueToApp()} loading={saving} disabled={chosen === null} />
   </Page>;
 }

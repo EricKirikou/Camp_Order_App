@@ -34,6 +34,7 @@ export default function OtpScreen() {
     try {
       const result = await verify.mutateAsync({ challengeId, code });
       if (result.sessionToken) await Auth.setSessionToken(result.sessionToken);
+      if (result.user) await Auth.setUserInfo(result.user);
       await removeOtpResendToken(challengeId);
       await utils.auth.me.invalidate();
       router.replace("/(auth)/campus");

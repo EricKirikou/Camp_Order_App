@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
 import { completeOtp, emailPasswordLogin, publicUser, resendOtp, setSession, startLogin, startSignup } from "../services/authentication";
 import { sessionCookieName, SESSION_MAX_AGE_MS } from "../services/security";
-import { getSessionCookieOptions } from "../_core/cookies";
+import { getSessionCookieName, getSessionCookieOptions } from "../_core/cookies";
 
 export const authRouter = router({
   startSignup: publicProcedure.input(z.object({
@@ -43,7 +43,7 @@ export const authRouter = router({
 
   me: protectedProcedure.query(({ ctx }) => publicUser(ctx.user)),
 
-  logout: protectedProcedure.mutation(({ ctx }) => {
+  logout: publicProcedure.mutation(({ ctx }) => {
     const cookieOptions = getSessionCookieOptions(ctx.req);
     ctx.res.clearCookie(sessionCookieName(), { ...cookieOptions, maxAge: -1 });
     return { success: true } as const;

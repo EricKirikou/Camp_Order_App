@@ -40,14 +40,14 @@ export default function BookServiceScreen() {
 
   return <Page>
     <Header title={serviceName} subtitle="Campus service request" back />
-    <View style={{ borderRadius: 21, backgroundColor: C.green, padding: 18, gap: 12 }}><View style={{ width: 45, height: 45, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" }}><Ionicons name="calendar-outline" size={22} color={C.white} /></View><Text style={{ color: C.white, fontSize: 22, fontWeight: "900" }}>{serviceName}</Text><Text style={{ color: "#D8EDE1", fontSize: 13, lineHeight: 19 }}>{current?.description ?? "Choose a time to request this service."}</Text>{current ? <Text style={{ color: C.white, fontWeight: "900" }}>Sample price from {formatGhs(current.startingPricePesewas)}</Text> : null}</View>
+    <View style={{ borderRadius: 21, backgroundColor: C.green, padding: 18, gap: 12 }}><View style={{ width: 45, height: 45, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" }}><Ionicons name="calendar-outline" size={22} color={C.white} /></View><Text style={{ color: C.white, fontSize: 22, fontWeight: "900" }}>{serviceName}</Text><Text style={{ color: "#D8EDE1", fontSize: 13, lineHeight: 19 }}>{current?.description ?? "Choose a time to request this service."}</Text>{current ? <Text style={{ color: C.white, fontWeight: "900" }}>Starting from {formatGhs(current.startingPricePesewas)}</Text> : null}</View>
     {!user ? <Notice tone="mango">Sign in is required to save this service request.</Notice> : null}
     {error ? <Notice tone="error">{error}</Notice> : null}
     <Field label="Requested date & time (UTC)" value={requestedAt} onChangeText={setRequestedAt} placeholder="2026-10-20T14:30:00.000Z" autoCapitalize="none" hint="Choose a quick time below or enter a future ISO date-time." />
     <View style={{ flexDirection: "row", gap: 8 }}>{[1, 3, 24].map((hours) => <Pressable key={hours} onPress={() => setRequestedAt(createFutureBookingTime(hours))} style={{ flex: 1, paddingVertical: 11, backgroundColor: C.sage, borderRadius: 12, alignItems: "center" }}><Text style={{ color: C.green, fontWeight: "800", fontSize: 12 }}>{hours === 24 ? "Tomorrow" : `In ${hours} hour${hours > 1 ? "s" : ""}`}</Text></Pressable>)}</View>
     <Field label="Details for the provider (optional)" value={details} onChangeText={setDetails} placeholder="Location, service preference or notes" multiline autoCapitalize="sentences" />
     {campusId ? <Notice>Campus: {selected.campus?.name ?? campuses.data?.find((item) => item.id === campusId)?.name}</Notice> : <Button title="Choose campus" variant="outline" onPress={() => router.push("/(auth)/campus")} />}
-    <Notice tone="mango">Your request will wait for a campus provider to confirm. Sample listings do not guarantee live availability.</Notice>
+    <Notice tone="mango">Your booking request will be confirmed with the service provider.</Notice>
     <Button title="Send booking request" icon="calendar-outline" onPress={() => void submit()} loading={book.isPending} disabled={!current || !requestedAt || !Number.isFinite(new Date(requestedAt).getTime())} />
   </Page>;
 }

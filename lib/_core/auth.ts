@@ -4,11 +4,13 @@ import { SESSION_TOKEN_KEY, USER_INFO_KEY } from "@/constants/oauth";
 
 export type User = {
   id: number;
-  openId: string;
   name: string | null;
   email: string | null;
-  loginMethod: string | null;
-  lastSignedIn: Date;
+  phoneNumber: string | null;
+  phoneVerified: boolean;
+  campusId: number | null;
+  role: "user" | "admin" | "moderator";
+  createdAt: Date | string;
 };
 
 export async function getSessionToken(): Promise<string | null> {

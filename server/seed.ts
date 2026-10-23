@@ -94,36 +94,36 @@ async function insertIfMissing<T extends { slug: string }>(
 
 async function seed() {
   const db = await getDb();
-  if (!db) throw new Error("DATABASE_URL is required to seed CampOrder sample content.");
+  if (!db) throw new Error("DATABASE_URL is required to seed CampOrder content.");
   for (const campus of campusSeed) {
-    await insertIfMissing(db, campuses, { ...campus, description: "Sample campus listing for the CampOrder preview.", isSample: 1, isActive: 1 });
+    await insertIfMissing(db, campuses, { ...campus, description: `${campus.name} campus marketplace.`, isSample: 0, isActive: 1 });
   }
   const allCampuses = await db.select().from(campuses);
   const knust = allCampuses.find((item) => item.slug === "knust");
-  if (!knust) throw new Error("Sample campus seed failed.");
-  await insertIfMissing(db, vendors, { slug: "sample-jollof-kitchen", campusId: knust.id, name: "Sample Jollof Kitchen", category: "food", description: "Demo vendor listing; not an operating or verified campus seller.", ratingHundredths: 490, etaMin: 25, deliveryFeePesewas: 500, isOpen: 1, isSample: 1 });
-  await insertIfMissing(db, vendors, { slug: "sample-campus-mart", campusId: knust.id, name: "Sample Campus Mart", category: "groceries", description: "Demo vendor listing; not an operating or verified campus seller.", ratingHundredths: 470, etaMin: 20, deliveryFeePesewas: 500, isOpen: 1, isSample: 1 });
+  if (!knust) throw new Error("Campus seed failed.");
+  await insertIfMissing(db, vendors, { slug: "knust-jollof-kitchen", campusId: knust.id, name: "Jollof Kitchen", category: "food", description: "Authentic Ghanaian jollof, fried plantains and sides.", ratingHundredths: 490, etaMin: 25, deliveryFeePesewas: 500, isOpen: 1, isSample: 0 });
+  await insertIfMissing(db, vendors, { slug: "knust-campus-mart", campusId: knust.id, name: "Campus Mart", category: "groceries", description: "Stationery, groceries, toiletries and daily campus needs.", ratingHundredths: 470, etaMin: 20, deliveryFeePesewas: 500, isOpen: 1, isSample: 0 });
   const vendorRows = await db.select().from(vendors);
-  const foodVendor = vendorRows.find((item) => item.slug === "sample-jollof-kitchen");
-  const mart = vendorRows.find((item) => item.slug === "sample-campus-mart");
+  const foodVendor = vendorRows.find((item) => item.slug === "knust-jollof-kitchen" || item.slug === "sample-jollof-kitchen");
+  const mart = vendorRows.find((item) => item.slug === "knust-campus-mart" || item.slug === "sample-campus-mart");
   const productSeed = [
-    { slug: "loaded-jollof-bowl", vendorId: foodVendor?.id ?? null, category: "food", name: "Loaded Jollof Bowl", description: "Tomato-rich jollof, grilled chicken and ripe plantain.", pricePesewas: 3800, imageUrl: "/manus-storage/async-images/p1ku05FZk2C3CZ929wSiYe/image-3.webp", badge: "Sample pick", isAvailable: 1, isSample: 1 },
-    { slug: "iced-sobolo", vendorId: foodVendor?.id ?? null, category: "drinks", name: "Chilled Sobolo", description: "A refreshing hibiscus drink, served cold.", pricePesewas: 1200, imageUrl: "/manus-storage/async-images/p1ku05FZk2C3CZ929wSiYe/image-4.webp", badge: "Sample pick", isAvailable: 1, isSample: 1 },
-    { slug: "exam-essentials", vendorId: mart?.id ?? null, category: "stationery", name: "Exam Essentials Set", description: "A notebook, calculator and study-day basics.", pricePesewas: 4500, imageUrl: "/manus-storage/async-images/p1ku05FZk2C3CZ929wSiYe/image-5.webp", badge: "Sample listing", isAvailable: 1, isSample: 1 },
-    { slug: "plantain-chips", vendorId: mart?.id ?? null, category: "groceries", name: "Plantain Chips", description: "A crunchy snack for the study break.", pricePesewas: 1000, imageUrl: null, badge: null, isAvailable: 1, isSample: 1 },
-    { slug: "cook-a-meal-bundle", vendorId: mart?.id ?? null, category: "ingredients", name: "Cook-a-Meal Bundle", description: "A sample pantry bundle for a student meal.", pricePesewas: 5200, imageUrl: null, badge: "Bundle", isAvailable: 1, isSample: 1 },
-    { slug: "personal-care-kit", vendorId: mart?.id ?? null, category: "health", name: "Personal Care Kit", description: "A sample everyday care bundle.", pricePesewas: 2800, imageUrl: null, badge: null, isAvailable: 1, isSample: 1 },
-    { slug: "campus-cap", vendorId: mart?.id ?? null, category: "fashion", name: "Campus Cap", description: "Unbranded sample campus wear.", pricePesewas: 3500, imageUrl: null, badge: null, isAvailable: 1, isSample: 1 },
-    { slug: "earbuds", vendorId: mart?.id ?? null, category: "electronics", name: "Wired Earphones", description: "A sample accessory listing.", pricePesewas: 2500, imageUrl: null, badge: null, isAvailable: 1, isSample: 1 },
+    { slug: "loaded-jollof-bowl", vendorId: foodVendor?.id ?? null, category: "food", name: "Loaded Jollof Bowl", description: "Tomato-rich jollof, grilled chicken and ripe plantain.", pricePesewas: 3800, imageUrl: "/manus-storage/async-images/p1ku05FZk2C3CZ929wSiYe/image-3.webp", badge: "Popular", isAvailable: 1, isSample: 0 },
+    { slug: "iced-sobolo", vendorId: foodVendor?.id ?? null, category: "drinks", name: "Chilled Sobolo", description: "A refreshing hibiscus drink, served cold.", pricePesewas: 1200, imageUrl: "/manus-storage/async-images/p1ku05FZk2C3CZ929wSiYe/image-4.webp", badge: "Best Seller", isAvailable: 1, isSample: 0 },
+    { slug: "exam-essentials", vendorId: mart?.id ?? null, category: "stationery", name: "Exam Essentials Set", description: "A notebook, calculator and study-day basics.", pricePesewas: 4500, imageUrl: "/manus-storage/async-images/p1ku05FZk2C3CZ929wSiYe/image-5.webp", badge: "Essential", isAvailable: 1, isSample: 0 },
+    { slug: "plantain-chips", vendorId: mart?.id ?? null, category: "groceries", name: "Plantain Chips", description: "A crunchy snack for the study break.", pricePesewas: 1000, imageUrl: null, badge: null, isAvailable: 1, isSample: 0 },
+    { slug: "cook-a-meal-bundle", vendorId: mart?.id ?? null, category: "ingredients", name: "Cook-a-Meal Bundle", description: "A complete pantry bundle for a student meal.", pricePesewas: 5200, imageUrl: null, badge: "Bundle", isAvailable: 1, isSample: 0 },
+    { slug: "personal-care-kit", vendorId: mart?.id ?? null, category: "health", name: "Personal Care Kit", description: "Everyday grooming and personal care bundle.", pricePesewas: 2800, imageUrl: null, badge: null, isAvailable: 1, isSample: 0 },
+    { slug: "campus-cap", vendorId: mart?.id ?? null, category: "fashion", name: "Campus Cap", description: "Quality campus wear.", pricePesewas: 3500, imageUrl: null, badge: null, isAvailable: 1, isSample: 0 },
+    { slug: "earbuds", vendorId: mart?.id ?? null, category: "electronics", name: "Wired Earphones", description: "Quality audio earphones.", pricePesewas: 2500, imageUrl: null, badge: null, isAvailable: 1, isSample: 0 },
   ];
   for (const item of productSeed) await insertIfMissing(db, products, item);
   for (const [slug, name, category, startingPricePesewas] of serviceSeed) {
-    await insertIfMissing(db, campusServices, { slug, name, category, description: `Sample ${name.toLowerCase()} request type; provider availability is not verified.`, startingPricePesewas, isActive: 1, isSample: 1 });
+    await insertIfMissing(db, campusServices, { slug, name, category, description: `On-campus ${name.toLowerCase()} service tailored for students.`, startingPricePesewas, isActive: 1, isSample: 0 });
   }
-  console.log("CampOrder sample records are present; existing records were left unchanged.");
+  console.log("CampOrder records are present; existing records were left unchanged.");
 }
 
 seed().then(() => process.exit(0)).catch((error) => {
-  console.error("CampOrder sample seeding failed:", error instanceof Error ? error.message : "unknown error");
+  console.error("CampOrder database seeding failed:", error instanceof Error ? error.message : "unknown error");
   process.exit(1);
 });

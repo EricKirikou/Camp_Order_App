@@ -8,7 +8,7 @@ import { Button, C } from "@/components/camporder/ui";
 import { ASSET_PATHS } from "@/lib/camporder/assets";
 
 const SLIDES = [
-  { eyebrow: "DELIVERY, ON YOUR ROUTE", title: "Campus to your door.", copy: "Get sample campus picks moving, from nearby kitchens and shops to your day.", image: ASSET_PATHS.campusDelivery, icon: "bicycle-outline" as const },
+  { eyebrow: "DELIVERY, ON YOUR ROUTE", title: "Campus to your door.", copy: "Order from nearby kitchens, shops, and campus essentials delivered straight to your door.", image: ASSET_PATHS.campusDelivery, icon: "bicycle-outline" as const },
   { eyebrow: "GOOD FOOD, CLOSE BY", title: "Your next meal, sorted.", copy: "Find comforting meals and refreshing drinks between lectures and study sessions.", image: ASSET_PATHS.jollof, icon: "fast-food-outline" as const },
   { eyebrow: "FRESH PICKS FOR YOUR DAY", title: "Stock up on campus.", copy: "Browse grocery staples and everyday essentials without leaving your campus routine.", image: ASSET_PATHS.essentials, icon: "basket-outline" as const },
 ];
@@ -65,7 +65,7 @@ export default function OnboardingScreen() {
       </View>
       <Button title={index === SLIDES.length - 1 ? "Get started" : "Continue"} icon="arrow-forward" onPress={() => index < SLIDES.length - 1 ? setIndex(index + 1) : void continueTo("/(tabs)")} loading={loading} />
       <Pressable onPress={() => void continueTo("/(auth)/login")} style={{ paddingVertical: 4 }}><Text style={{ textAlign: "center", color: C.green, fontWeight: "800", fontSize: 13 }}>Already have an account? Sign in</Text></Pressable>
-      <Text style={{ textAlign: "center", color: C.muted, fontSize: 10, lineHeight: 15 }}>Campus images and listings are sample preview content.</Text>
+      <Text style={{ textAlign: "center", color: C.muted, fontSize: 10, lineHeight: 15 }}>Fast, convenient campus ordering and delivery.</Text>
     </View>
   </View>;
 }
