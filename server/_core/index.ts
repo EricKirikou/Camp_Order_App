@@ -16,7 +16,7 @@ import fs from "node:fs";
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  const allowedOrigins = new Set(["https://camp-order-app-1.onrender.com"]);
+  const allowedOrigins = new Set(["https://camp-order-app-1.onrender.com", "https://camp-order-app-backend.onrender.com"]);
   app.use(createCorsMiddleware(allowedOrigins));
   app.use(clearLegacySessionCookie());
   
