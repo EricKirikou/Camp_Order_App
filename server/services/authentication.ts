@@ -249,7 +249,7 @@ export async function setSession(req: Request, res: Response, token: string): Pr
     secure,
     maxAge: SESSION_MAX_AGE_MS,
   });
-  return req.header("x-camporder-client") === "native" ? token : null;
+  return token;
 }
 
 export async function authenticateCampOrderRequest(req: Request): Promise<User | null> {
