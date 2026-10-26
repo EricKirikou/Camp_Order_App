@@ -16,7 +16,8 @@ import fs from "node:fs";
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  app.use(createCorsMiddleware());
+  const allowedOrigins = new Set(["https://camp-order-app-1.onrender.com"]);
+  app.use(createCorsMiddleware(allowedOrigins));
   app.use(clearLegacySessionCookie());
   
   const uploadsDir = path.join(process.cwd(), "public", "uploads");
