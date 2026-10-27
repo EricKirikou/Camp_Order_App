@@ -15,11 +15,18 @@ export function createTRPCClient() {
         url: `${getApiBaseUrl()}/api/trpc`,
         transformer: superjson,
         async headers() {
-          const token = await Auth.getSessionToken();
-          return {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            "x-camporder-client": Platform.OS === "web" ? "web" : "native",
-          };
+  const token = await Auth.getSessionToken();
+
+  console.log("[tRPC] Platform:", Platform.OS);
+  console.log("[tRPC] Token exists:", Boolean(token));
+  console.log("[tRPC] Token length:", token?.length ?? 0);
+
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    "x-camporder-client": Platform.OS === "web" ? "web" : "native",
+  };
+},
+
         },
         fetch(url, options) {
           return fetch(url, { ...options, credentials: "include" });
