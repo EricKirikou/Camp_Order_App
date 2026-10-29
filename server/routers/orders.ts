@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { cartItems, carts, orders, orderItems, products } from "../../drizzle/schema";
+import { cartItems, carts, orders, orderItems, products, users, vendors } from "../../drizzle/schema";
 import { router, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
 
@@ -15,7 +15,7 @@ export const ordersRouter = router({
   byId: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Orders are unavailable." });
-    const isStaffOrCourier = ctx.user.role === "courier" || ctx.user.role === "admin" || ctx.user.role === "moderator";
+    const isStaffOrCourier = ctx.user.role === "courier" || ctx.user.role === "admin" || ctx.user.role === "moderator" || ctx.user.role === "vendor";
     const found = await db
       .select()
       .from(orders)
@@ -29,7 +29,41 @@ export const ordersRouter = router({
       .limit(1);
     if (!found[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
     const items = await db.select().from(orderItems).where(eq(orderItems.orderId, input.id));
-    return { ...found[0], items };
+
+    let vendorInfo = null;
+    if (items.length > 0) {
+      const prodVendor = await db
+        .select({
+          id: vendors.id,
+          name: vendors.name,
+          etaMin: vendors.etaMin,
+          category: vendors.category,
+        })
+        .from(orderItems)
+        .leftJoin(products, eq(orderItems.productId, products.id))
+        .leftJoin(vendors, eq(products.vendorId, vendors.id))
+        .where(eq(orderItems.orderId, input.id))
+        .limit(1);
+      if (prodVendor[0]?.id) {
+        vendorInfo = prodVendor[0];
+      }
+    }
+
+    let courierInfo = null;
+    if (found[0].courierId) {
+      const cour = await db
+        .select({
+          id: users.id,
+          name: users.name,
+          phoneNumber: users.phoneNumber,
+        })
+        .from(users)
+        .where(eq(users.id, found[0].courierId))
+        .limit(1);
+      if (cour[0]) courierInfo = cour[0];
+    }
+
+    return { ...found[0], items, vendor: vendorInfo, courier: courierInfo };
   }),
 
   reorder: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {

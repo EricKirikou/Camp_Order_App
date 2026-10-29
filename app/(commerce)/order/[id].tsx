@@ -7,13 +7,87 @@ import { Button, C, Header, Notice, Page } from "@/components/camporder/ui";
 import { formatGhs, friendlyError, ORDER_STATUS_LABEL } from "@/lib/camporder/format";
 import { trpc } from "@/lib/trpc";
 
+import { RiderLiveMap } from "@/components/camporder/RiderLiveMap";
+import { useEffect } from "react";
+
 const STEPS = ["placed", "accepted", "preparing", "on_the_way", "completed"];
+
+function PrepWaitCard({
+  updatedAt,
+  etaMin = 20,
+  vendorName = "Campus Kitchen",
+}: {
+  updatedAt?: string | Date;
+  etaMin?: number;
+  vendorName?: string;
+}) {
+  const [secondsLeft, setSecondsLeft] = useState(() => {
+    if (!updatedAt) return etaMin * 60;
+    const startMs = new Date(updatedAt).getTime();
+    const targetMs = startMs + etaMin * 60 * 1000;
+    return Math.max(0, Math.floor((targetMs - Date.now()) / 1000));
+  });
+
+  useEffect(() => {
+    if (!updatedAt) return;
+    const interval = setInterval(() => {
+      const startMs = new Date(updatedAt).getTime();
+      const targetMs = startMs + etaMin * 60 * 1000;
+      const left = Math.max(0, Math.floor((targetMs - Date.now()) / 1000));
+      setSecondsLeft(left);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [updatedAt, etaMin]);
+
+  const totalSeconds = Math.max(60, etaMin * 60);
+  const elapsed = totalSeconds - secondsLeft;
+  const progressPercent = Math.min(100, Math.max(5, Math.floor((elapsed / totalSeconds) * 100)));
+  const mins = Math.floor(secondsLeft / 60);
+  const secs = secondsLeft % 60;
+  const formatted = `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+
+  return (
+    <View style={{ backgroundColor: "#FFF8ED", borderRadius: 20, padding: 16, borderWidth: 1, borderColor: "#FDE68A", gap: 12 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ width: 34, height: 34, borderRadius: 12, backgroundColor: "#FEF3C7", alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="restaurant" size={18} color="#D97706" />
+          </View>
+          <View>
+            <Text style={{ color: "#92400E", fontSize: 11, fontWeight: "900", letterSpacing: 0.5 }}>FOOD PREPARATION</Text>
+            <Text style={{ color: C.ink, fontSize: 15, fontWeight: "800" }}>{vendorName}</Text>
+          </View>
+        </View>
+        <View style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+          <Text style={{ color: "#B45309", fontSize: 13, fontWeight: "900" }}>~{formatted} left</Text>
+        </View>
+      </View>
+
+      <View style={{ height: 8, backgroundColor: "#FDE68A", borderRadius: 4, overflow: "hidden" }}>
+        <View style={{ width: `${progressPercent}%`, height: "100%", backgroundColor: "#F59E0B", borderRadius: 4 }} />
+      </View>
+
+      <Text style={{ color: "#78350F", fontSize: 12, lineHeight: 17 }}>
+        Food is being prepared according to the vendor's wait time (~{etaMin} min). Once ready, the order automatically skips to "On The Way"!
+      </Text>
+    </View>
+  );
+}
 
 export default function OrderDetailsScreen() {
   const router = useRouter();
   const utils = trpc.useUtils();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const order = trpc.orders.byId.useQuery({ id: Number(id) }, { enabled: Number.isInteger(Number(id)) });
+  const order = trpc.orders.byId.useQuery(
+    { id: Number(id) },
+    {
+      enabled: Number.isInteger(Number(id)),
+      refetchInterval: (query) => {
+        const s = query.state.data?.status;
+        return s === "placed" || s === "accepted" || s === "preparing" || s === "on_the_way" ? 3500 : false;
+      },
+    }
+  );
   const retryPayment = trpc.payments.retryPayment.useMutation();
   const reorder = trpc.orders.reorder.useMutation();
   const cancelOrder = trpc.orders.cancel.useMutation();
@@ -125,6 +199,26 @@ export default function OrderDetailsScreen() {
         </View>
       </View>
     )}
+
+    {data.status === "preparing" ? (
+      <PrepWaitCard
+        updatedAt={data.updatedAt}
+        etaMin={data.vendor?.etaMin ?? 20}
+        vendorName={data.vendor?.name ?? "Campus Kitchen"}
+      />
+    ) : null}
+
+    {data.status === "on_the_way" ? (
+      <RiderLiveMap
+        vendorName={data.vendor?.name ?? "Campus Kitchen"}
+        deliveryAddress={data.deliveryAddress}
+        orderCode={data.orderCode}
+        riderName={data.courier?.name ?? "Campus Courier"}
+        riderPhone={data.courier?.phoneNumber ?? undefined}
+        updatedAt={typeof data.updatedAt === "string" ? data.updatedAt : data.updatedAt ? new Date(data.updatedAt).toISOString() : undefined}
+        etaMin={data.vendor?.etaMin ?? 15}
+      />
+    ) : null}
 
     <View style={{ borderRadius: 18, backgroundColor: C.white, padding: 16, borderWidth: 1, borderColor: C.border, gap: 11 }}>
       <Text style={{ color: C.ink, fontSize: 16, fontWeight: "900" }}>Items</Text>

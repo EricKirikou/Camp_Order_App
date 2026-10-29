@@ -62,6 +62,7 @@ export const vendors = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     slug: varchar("slug", { length: 80 }).notNull().unique(),
     campusId: int("campusId").notNull().references(() => campuses.id),
+    userId: int("userId").references(() => users.id),
     name: varchar("name", { length: 180 }).notNull(),
     category: varchar("category", { length: 80 }).notNull(),
     description: text("description"),
@@ -71,6 +72,8 @@ export const vendors = mysqlTable(
     isOpen: int("isOpen").default(1).notNull(),
     isSample: int("isSample").default(0).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+    deletedAt: timestamp("deletedAt"),
   },
 );
 
@@ -124,6 +127,8 @@ export const orders = mysqlTable("orders", {
   deliveryAddress: text("deliveryAddress").notNull(),
   customerEmail: varchar("customerEmail", { length: 320 }).notNull(),
   note: text("note"),
+  courierId: int("courierId").references(() => users.id),
+  courierAcceptedAt: timestamp("courierAcceptedAt"),
   deletedAt: timestamp("deletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

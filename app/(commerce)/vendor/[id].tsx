@@ -5,15 +5,28 @@ import { Button, C, CartIconButton, Notice, Page, ProductCard } from "@/componen
 import { useCampOrderUser } from "@/hooks/use-camporder-user";
 import { trpc } from "@/lib/trpc";
 
+import VendorPortalScreen from "./portal";
+
 export default function VendorScreen() {
   const router = useRouter();
   const { user } = useCampOrderUser();
-  const cart = trpc.cart.get.useQuery(undefined, { enabled: Boolean(user), retry: false });
   const { id } = useLocalSearchParams<{ id: string }>();
+
+  // If the logged in user is a vendor or accessing their portal, show the Vendor Management Portal
+  if (user?.role === "vendor" || id === "portal" || id === "me") {
+    return <VendorPortalScreen />;
+  }
+
+  const cart = trpc.cart.get.useQuery(undefined, { enabled: Boolean(user), retry: false });
   const vendor = trpc.catalog.vendor.useQuery({ id: Number(id) }, { enabled: Number.isInteger(Number(id)) && Number(id) > 0 });
   if (vendor.isLoading) return <Page><Text style={{ color: C.muted }}>Loading campus shop…</Text></Page>;
   if (!vendor.data) return <Page><Text style={{ color: C.ink, fontSize: 20, fontWeight: "800" }}>Shop unavailable</Text><Button title="Explore campus" variant="outline" onPress={() => router.back()} /></Page>;
   const shop = vendor.data;
+
+  // If the vendor owner is viewing their own shop
+  if (user && shop.userId && user.id === shop.userId) {
+    return <VendorPortalScreen />;
+  }
   return <Page>
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 11 }}>

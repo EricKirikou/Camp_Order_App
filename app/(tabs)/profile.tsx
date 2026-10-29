@@ -90,7 +90,11 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" color={C.muted} size={18} />
           </Pressable>
           <Button title="My orders" variant="outline" icon="receipt-outline" onPress={() => router.push("/(tabs)/orders")} />
-          <Button title="Campus errands & services" variant="outline" icon="sparkles-outline" onPress={() => router.push("/(services)")} />
+          {user.role === "vendor" || user.role === "admin" || user.role === "moderator" ? (
+            <Button title="Vendor kitchen portal" variant="outline" icon="restaurant-outline" onPress={() => router.push("/(commerce)/vendor/portal")} />
+          ) : (
+            <Button title="Open vendor kitchen" variant="quiet" icon="restaurant-outline" onPress={() => router.push("/(commerce)/vendor/portal")} />
+          )}
           {user.role === "courier" || user.role === "admin" || user.role === "moderator" ? (
             <Button title="Rider deliveries" variant="outline" icon="bicycle-outline" onPress={() => router.push("/(commerce)/rider/dashboard")} />
           ) : null}
