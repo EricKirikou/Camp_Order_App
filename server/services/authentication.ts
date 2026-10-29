@@ -241,18 +241,32 @@ function secureRequest(req: Request): boolean {
 }
 
 export async function setSession(req: Request, res: Response, token: string): Promise<string> {
-  // Access token strategy: do not set an HTTP‑only cookie.
-  // The client should provide the token in the Authorization header for subsequent requests.
+  // Set an HTTP‑only session cookie for browser clients.
+  // Use secure flag when the request is over HTTPS.
+  const isSecure = req.secure || (Array.isArray(req.headers["x-forwarded-proto"]) ? req.headers["x-forwarded-proto"].includes("https") : req.headers["x-forwarded-proto"] === "https");
+  res.cookie(sessionCookieName(), token, {
+    httpOnly: true,
+    secure: isSecure,
+    maxAge: SESSION_MAX_AGE_MS,
+    sameSite: "lax",
+  });
   return token;
 }
 
 export async function authenticateCampOrderRequest(req: Request): Promise<User | null> {
+  // Try Authorization header first
   const authorization = req.headers.authorization;
-  const bearer = typeof authorization === "string" && authorization.startsWith("Bearer ")
+  const bearerHeader = typeof authorization === "string" && authorization.startsWith("Bearer ")
     ? authorization.slice(7).trim()
     : null;
-  if (!bearer) return null;
-  const userId = await verifySessionToken(bearer);
+  // If no Bearer token, fall back to session cookie
+  let token: string | null = bearerHeader ?? null;
+  if (!token && req.headers.cookie) {
+    const cookies = parseCookieHeader(req.headers.cookie);
+    token = cookies[sessionCookieName()] ?? null;
+  }
+  if (!token) return null;
+  const userId = await verifySessionToken(token);
   if (!userId) return null;
   const db = await getDb();
   if (!db) return null;
