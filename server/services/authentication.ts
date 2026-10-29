@@ -240,15 +240,9 @@ function secureRequest(req: Request): boolean {
   return values.some((value) => value.trim().toLowerCase() === "https");
 }
 
-export async function setSession(req: Request, res: Response, token: string): Promise<string | null> {
-  const secure = secureRequest(req);
-  res.cookie(sessionCookieName(), token, {
-    httpOnly: true,
-    path: "/",
-    sameSite: secure ? "none" : "lax",
-    secure,
-    maxAge: SESSION_MAX_AGE_MS,
-  });
+export async function setSession(req: Request, res: Response, token: string): Promise<string> {
+  // Access token strategy: do not set an HTTP‑only cookie.
+  // The client should provide the token in the Authorization header for subsequent requests.
   return token;
 }
 
@@ -257,10 +251,8 @@ export async function authenticateCampOrderRequest(req: Request): Promise<User |
   const bearer = typeof authorization === "string" && authorization.startsWith("Bearer ")
     ? authorization.slice(7).trim()
     : null;
-  const cookieValue = req.headers.cookie ? parseCookieHeader(req.headers.cookie)[sessionCookieName()] : undefined;
-  const token = bearer || cookieValue;
-  if (!token) return null;
-  const userId = await verifySessionToken(token);
+  if (!bearer) return null;
+  const userId = await verifySessionToken(bearer);
   if (!userId) return null;
   const db = await getDb();
   if (!db) return null;
