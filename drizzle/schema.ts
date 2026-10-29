@@ -72,8 +72,6 @@ export const vendors = mysqlTable(
     isOpen: int("isOpen").default(1).notNull(),
     isSample: int("isSample").default(0).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-    deletedAt: timestamp("deletedAt"),
   },
 );
 
