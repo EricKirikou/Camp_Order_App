@@ -9,19 +9,17 @@ import { initializeGhsPayment, verifyGhsPayment } from "../services/paystack";
 
 function ensureTestKey() {
   const key = process.env.PAYSTACK_SECRET_KEY;
-  if (!key) throw new TRPCError({ code: "PRECONDITION_FAILED", message: process.env.NODE_ENV === "production"
-    ? "Production checkout is not configured. Add a Paystack live key through protected setup."
-    : "Checkout is not configured yet. Add the Paystack test key through protected setup." });
-  if (process.env.NODE_ENV === "production") {
-    if (!key.startsWith("sk_live_")) {
-      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Production checkout requires a Paystack live key through protected setup." });
-    }
-  } else {
-    // In development, accept any sk_test_ key — the sandbox fallback in paystack.ts
-    // will simulate the transaction if the key is a placeholder.
-    if (!key.startsWith("sk_test_")) {
-      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Development checkout only accepts a Paystack test key." });
-    }
+  if (!key) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Checkout is not configured yet. Add a Paystack key through protected setup.",
+    });
+  }
+  if (!key.startsWith("sk_test_") && !key.startsWith("sk_live_")) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Paystack secret key must start with 'sk_test_' or 'sk_live_'.",
+    });
   }
 }
 

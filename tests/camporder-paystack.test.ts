@@ -57,4 +57,17 @@ describe("Paystack GHS adapter", () => {
     expect(verifyResult.status).toBe("success");
     expect(verifyResult.reference).toBe("camporder-retry-ref-123");
   });
+
+  it("supports sk_test_ keys in production environments", async () => {
+    vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_camporder_test_secret_key_2024");
+    vi.stubEnv("NODE_ENV", "production");
+    const result = await initializeGhsPayment({
+      email: "student@knust.edu.gh",
+      amountPesewas: 3500,
+      reference: "camporder-prod-test-ref",
+      callbackUrl: "https://camp-order-app-1.onrender.com/payment",
+    });
+    expect(result.authorization_url).toContain("/paystack-sandbox");
+    expect(result.reference).toBe("camporder-prod-test-ref");
+  });
 });

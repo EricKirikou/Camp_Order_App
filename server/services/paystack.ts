@@ -13,22 +13,19 @@ export type PaystackVerifyResult = {
 
 function secretKey(): string {
   const key = process.env.PAYSTACK_SECRET_KEY;
-  if (!key) throw new Error(process.env.NODE_ENV === "production"
-    ? "Production checkout is not configured. Add a Paystack live key through protected setup."
-    : "Paystack is not configured. Add a protected test key before checkout.");
-  const expectedPrefix = process.env.NODE_ENV === "production" ? "sk_live_" : "sk_test_";
-  if (!key.startsWith(expectedPrefix)) {
-    throw new Error(process.env.NODE_ENV === "production"
-      ? "Production checkout requires a Paystack live secret configured through protected setup."
-      : "Development checkout only accepts a Paystack test secret key.");
+  if (!key) {
+    throw new Error("Paystack is not configured. Add a Paystack secret key starting with 'sk_test_' or 'sk_live_'.");
+  }
+  if (!key.startsWith("sk_test_") && !key.startsWith("sk_live_")) {
+    throw new Error("Paystack secret key must start with 'sk_test_' or 'sk_live_'.");
   }
   return key;
 }
 
 async function request<T>(path: string, init: RequestInit): Promise<T> {
   const key = secretKey();
-  const isDev = process.env.NODE_ENV !== "production";
-  const isKnownPlaceholder = isDev && (key === "sk_test_camporder_test_secret_key_2024" || key.includes("placeholder") || key.includes("example"));
+  const isTestKey = key.startsWith("sk_test_");
+  const isKnownPlaceholder = isTestKey && (key === "sk_test_camporder_test_secret_key_2024" || key.includes("placeholder") || key.includes("example"));
 
   // If not a known placeholder, attempt real Paystack API call
   if (!isKnownPlaceholder) {
@@ -46,19 +43,19 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
       if (response.ok && body.status && body.data) {
         return body.data;
       }
-      // If we got an explicit error message from Paystack, log it or throw if not in dev test key fallback
-      if (!isDev) {
+      // If live key or real test error with message, throw if not a test key fallback
+      if (!isTestKey) {
         throw new Error(body.message || `Paystack error HTTP ${response.status}`);
       }
     } catch (err) {
-      if (!isDev) {
+      if (!isTestKey) {
         throw err instanceof Error ? err : new Error("Paystack network request failed");
       }
     }
   }
 
-  // Sandbox simulation fallback in development if test key is a placeholder or Paystack API is unreachable
-  if (isDev && key.startsWith("sk_test_")) {
+  // Sandbox simulation fallback if test key is a placeholder or Paystack API is unreachable
+  if (isTestKey) {
     if (path.startsWith("/transaction/initialize")) {
       const payload = init.body ? JSON.parse(init.body as string) : {};
       const ref = payload.reference || `camp_${Date.now()}`;
