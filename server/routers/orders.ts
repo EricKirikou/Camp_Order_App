@@ -15,7 +15,18 @@ export const ordersRouter = router({
   byId: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Orders are unavailable." });
-    const found = await db.select().from(orders).where(and(eq(orders.id, input.id), eq(orders.userId, ctx.user.id), isNull(orders.deletedAt))).limit(1);
+    const isStaffOrCourier = ctx.user.role === "courier" || ctx.user.role === "admin" || ctx.user.role === "moderator";
+    const found = await db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.id, input.id),
+          isNull(orders.deletedAt),
+          isStaffOrCourier ? undefined : eq(orders.userId, ctx.user.id)
+        )
+      )
+      .limit(1);
     if (!found[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
     const items = await db.select().from(orderItems).where(eq(orderItems.orderId, input.id));
     return { ...found[0], items };

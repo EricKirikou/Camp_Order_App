@@ -91,6 +91,9 @@ export default function ProfileScreen() {
           </Pressable>
           <Button title="My orders" variant="outline" icon="receipt-outline" onPress={() => router.push("/(tabs)/orders")} />
           <Button title="Campus errands & services" variant="outline" icon="sparkles-outline" onPress={() => router.push("/(services)")} />
+          {user.role === "courier" || user.role === "admin" || user.role === "moderator" ? (
+            <Button title="Rider deliveries" variant="outline" icon="bicycle-outline" onPress={() => router.push("/(commerce)/rider/dashboard")} />
+          ) : null}
           {user.role === "admin" || user.role === "moderator" ? <Button title="Admin console" variant="outline" icon="settings-outline" onPress={() => router.push("/admin")} /> : null}
           <Button title="Sign out" variant="quiet" onPress={() => setShowSignoutModal(true)} />
         </>

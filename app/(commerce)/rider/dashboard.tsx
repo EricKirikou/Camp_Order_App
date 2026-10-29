@@ -24,13 +24,13 @@ export default function RiderDashboard() {
   const { data: pendingOrders, isLoading, error } = trpc.rider.pendingOrders.useQuery();
 
   const acceptOrder = trpc.rider.acceptOrder.useMutation({
-    onSuccess: (order) => {
+    onSuccess: (order: { id: number; status: string }) => {
       // Invalidate any cached order lists so the UI stays fresh.
       utils.rider.pendingOrders.invalidate();
       // Navigate directly to the order tracking screen.
-      router.push(`/order/${order.id}`);
+      router.push({ pathname: "/(commerce)/order/[id]", params: { id: String(order.id) } });
     },
-    onError: (e) => {
+    onError: (_e: unknown) => {
       alert('Could not accept order. It may have been taken by someone else.');
     },
   });
@@ -47,7 +47,7 @@ export default function RiderDashboard() {
   if (isLoading) {
     return (
       <Page>
-        <Header title="Rider Dashboard" back={false} />
+        <Header title="Rider Dashboard" back />
         <ActivityIndicator size="large" color={C.sage} style={{ marginTop: 30 }} />
       </Page>
     );
@@ -56,7 +56,7 @@ export default function RiderDashboard() {
   if (error) {
     return (
       <Page>
-        <Header title="Rider Dashboard" back={false} />
+        <Header title="Rider Dashboard" back />
         <Notice tone="error">Failed to load orders. Please try again later.</Notice>
       </Page>
     );
@@ -65,7 +65,7 @@ export default function RiderDashboard() {
   if (!pendingOrders?.length) {
     return (
       <Page>
-        <Header title="Rider Dashboard" back={false} />
+        <Header title="Rider Dashboard" back />
         <Notice tone="mango">No new orders at the moment. Pull down to refresh.</Notice>
       </Page>
     );
@@ -73,7 +73,7 @@ export default function RiderDashboard() {
 
   return (
     <Page>
-      <Header title="Rider Dashboard" back={false} />
+      <Header title="Rider Dashboard" back />
       <FlatList
         data={pendingOrders}
         keyExtractor={(item) => item.id.toString()}

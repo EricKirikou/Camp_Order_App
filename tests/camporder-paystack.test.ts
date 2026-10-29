@@ -66,6 +66,7 @@ describe("Paystack GHS adapter", () => {
       amountPesewas: 3500,
       reference: "camporder-prod-test-ref",
       callbackUrl: "https://camp-order-app-1.onrender.com/payment",
+      metadata: { orderId: 101 },
     });
     expect(result.authorization_url).toContain("/paystack-sandbox");
     expect(result.reference).toBe("camporder-prod-test-ref");
