@@ -32,7 +32,6 @@ function KitchenOrderCard({
   isPreparingLoading: boolean;
   isPreparedLoading: boolean;
 }) {
-  // Realtime countdown for food being prepared
   const isPreparing = order.status === "preparing";
   const [secondsLeft, setSecondsLeft] = useState(() => {
     if (!order.updatedAt) return etaMin * 60;
@@ -95,7 +94,6 @@ function KitchenOrderCard({
         </View>
       </View>
 
-      {/* Items list */}
       <View style={styles.itemsList}>
         {order.items?.map((item: any) => (
           <View key={item.id} style={styles.itemRow}>
@@ -108,7 +106,6 @@ function KitchenOrderCard({
         ))}
       </View>
 
-      {/* Realtime wait timer when food is being prepared */}
       {isPreparing && (
         <View style={styles.prepTimerContainer}>
           <View style={styles.prepTimerHeader}>
@@ -127,7 +124,6 @@ function KitchenOrderCard({
         </View>
       )}
 
-      {/* Action buttons */}
       <View style={styles.actionRow}>
         {order.status === "placed" || order.status === "accepted" ? (
           <Button
@@ -164,24 +160,52 @@ export default function VendorPortalScreen() {
   const { user } = useCampOrderUser();
   const utils = trpc.useUtils();
 
-  const [activeTab, setActiveTab] = useState<"orders" | "products" | "settings">("orders");
+  const isAdminOrMod = user?.role === "admin" || user?.role === "moderator";
+  const isVendorRole = user?.role === "vendor";
+
+  type Tab = "orders" | "products" | "revenue" | "settings";
+  const [activeTab, setActiveTab] = useState<Tab>("orders");
   const [feedback, setFeedback] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Admin/moderator vendor picker
+  const [selectedVendorId, setSelectedVendorId] = useState<number | undefined>(undefined);
+  const [showVendorPicker, setShowVendorPicker] = useState(false);
+
+  // All vendors list (admin/moderator only)
+  const allVendorsQuery = trpc.vendor.listAll.useQuery(undefined, {
+    enabled: Boolean(user) && isAdminOrMod,
+  });
+
+  const selectedVendor = isAdminOrMod
+    ? allVendorsQuery.data?.find((v) => v.id === selectedVendorId) ?? allVendorsQuery.data?.[0]
+    : undefined;
+
+  const effectiveVendorId = isAdminOrMod ? (selectedVendorId ?? allVendorsQuery.data?.[0]?.id) : undefined;
+
   // Data queries
-  const profileQuery = trpc.vendor.getProfile.useQuery(undefined, {
-    enabled: Boolean(user),
-  });
-  const ordersQuery = trpc.vendor.getKitchenOrders.useQuery(undefined, {
-    enabled: Boolean(user),
-    refetchInterval: 3500, // Live poll every 3.5s
-  });
+  const profileQuery = trpc.vendor.getProfile.useQuery(
+    { vendorId: effectiveVendorId },
+    { enabled: Boolean(user) && (isAdminOrMod || isVendorRole) }
+  );
+  const ordersQuery = trpc.vendor.getKitchenOrders.useQuery(
+    { vendorId: effectiveVendorId },
+    {
+      enabled: Boolean(user) && (isAdminOrMod || isVendorRole),
+      refetchInterval: 3500,
+    }
+  );
+  const revenueQuery = trpc.vendor.getRevenue.useQuery(
+    { vendorId: effectiveVendorId },
+    { enabled: Boolean(user) && (isAdminOrMod || isVendorRole) }
+  );
 
   // Mutations
   const updateProfileMutation = trpc.vendor.updateProfile.useMutation();
   const createProductMutation = trpc.vendor.createProduct.useMutation();
   const toggleProductMutation = trpc.vendor.toggleProductAvailability.useMutation();
   const deleteProductMutation = trpc.vendor.deleteProduct.useMutation();
+  const deleteVendorMutation = trpc.vendor.deleteVendor.useMutation();
   const markPreparingMutation = trpc.vendor.markPreparing.useMutation();
   const markPreparedMutation = trpc.vendor.markPrepared.useMutation();
 
@@ -192,7 +216,6 @@ export default function VendorPortalScreen() {
   const [etaMin, setEtaMin] = useState("20");
   const [isOpen, setIsOpen] = useState(true);
 
-  // Sync shop state when loaded
   useEffect(() => {
     if (profileQuery.data?.shop) {
       const s = profileQuery.data.shop;
@@ -204,7 +227,7 @@ export default function VendorPortalScreen() {
     }
   }, [profileQuery.data?.shop]);
 
-  // Upload Product Modal State
+  // Product upload modal state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [newProdName, setNewProdName] = useState("");
   const [newProdCategory, setNewProdCategory] = useState("Meals");
@@ -213,13 +236,19 @@ export default function VendorPortalScreen() {
   const [newProdBadge, setNewProdBadge] = useState("");
   const [newProdImg, setNewProdImg] = useState("");
 
+  const invalidateAll = async () => {
+    await Promise.all([
+      utils.vendor.getProfile.invalidate(),
+      utils.vendor.getKitchenOrders.invalidate(),
+      utils.vendor.getRevenue.invalidate(),
+      utils.vendor.listAll.invalidate(),
+    ]);
+  };
+
   const handleSaveProfile = async () => {
     setErrorMsg("");
     setFeedback("");
-    if (!shopName.trim()) {
-      setErrorMsg("Please enter your vendor/kitchen name.");
-      return;
-    }
+    if (!shopName.trim()) { setErrorMsg("Please enter your vendor/kitchen name."); return; }
     const parsedEta = parseInt(etaMin, 10);
     if (isNaN(parsedEta) || parsedEta < 1 || parsedEta > 180) {
       setErrorMsg("Please enter a valid preparation wait time (1-180 minutes).");
@@ -227,6 +256,7 @@ export default function VendorPortalScreen() {
     }
     try {
       await updateProfileMutation.mutateAsync({
+        vendorId: effectiveVendorId,
         name: shopName.trim(),
         category: category.trim(),
         description: description.trim(),
@@ -234,8 +264,7 @@ export default function VendorPortalScreen() {
         isOpen: isOpen ? 1 : 0,
       });
       setFeedback("Kitchen profile updated successfully!");
-      await utils.vendor.getProfile.invalidate();
-      await utils.vendor.getKitchenOrders.invalidate();
+      await invalidateAll();
     } catch (err) {
       setErrorMsg(friendlyError(err, "Could not update kitchen profile."));
     }
@@ -244,19 +273,16 @@ export default function VendorPortalScreen() {
   const handleUploadProduct = async () => {
     setErrorMsg("");
     setFeedback("");
-    if (!newProdName.trim()) {
-      setErrorMsg("Please enter a product name.");
-      return;
-    }
+    if (!newProdName.trim()) { setErrorMsg("Please enter a product name."); return; }
     const priceFloat = parseFloat(newProdPrice);
     if (isNaN(priceFloat) || priceFloat <= 0) {
       setErrorMsg("Please enter a valid price in GHS (e.g. 35.00).");
       return;
     }
     const pricePesewas = Math.round(priceFloat * 100);
-
     try {
       await createProductMutation.mutateAsync({
+        vendorId: effectiveVendorId,
         name: newProdName.trim(),
         category: newProdCategory.trim(),
         pricePesewas,
@@ -265,15 +291,10 @@ export default function VendorPortalScreen() {
         imageUrl: newProdImg.trim() || undefined,
         isAvailable: 1,
       });
-
       setShowUploadModal(false);
-      setNewProdName("");
-      setNewProdPrice("");
-      setNewProdDesc("");
-      setNewProdBadge("");
-      setNewProdImg("");
+      setNewProdName(""); setNewProdPrice(""); setNewProdDesc(""); setNewProdBadge(""); setNewProdImg("");
       setFeedback("Product uploaded successfully to your menu!");
-      await utils.vendor.getProfile.invalidate();
+      await invalidateAll();
     } catch (err) {
       setErrorMsg(friendlyError(err, "Could not upload product."));
     }
@@ -282,8 +303,8 @@ export default function VendorPortalScreen() {
   const handleToggleProduct = async (productId: number, currentAvailable: number) => {
     try {
       const next = currentAvailable === 1 ? 0 : 1;
-      await toggleProductMutation.mutateAsync({ productId, isAvailable: next });
-      await utils.vendor.getProfile.invalidate();
+      await toggleProductMutation.mutateAsync({ productId, isAvailable: next, vendorId: effectiveVendorId });
+      await invalidateAll();
     } catch (err) {
       setErrorMsg(friendlyError(err, "Could not update availability."));
     }
@@ -291,8 +312,8 @@ export default function VendorPortalScreen() {
 
   const handleDeleteProduct = async (productId: number) => {
     try {
-      await deleteProductMutation.mutateAsync({ productId });
-      await utils.vendor.getProfile.invalidate();
+      await deleteProductMutation.mutateAsync({ productId, vendorId: effectiveVendorId });
+      await invalidateAll();
     } catch (err) {
       setErrorMsg(friendlyError(err, "Could not remove product."));
     }
@@ -311,7 +332,6 @@ export default function VendorPortalScreen() {
   const handleMarkPrepared = async (orderId: number) => {
     setErrorMsg("");
     try {
-      // Auto skips to 'on_the_way'
       await markPreparedMutation.mutateAsync({ orderId });
       await utils.vendor.getKitchenOrders.invalidate();
       setFeedback("Order marked prepared! Auto-switched to On The Way for rider delivery.");
@@ -320,6 +340,19 @@ export default function VendorPortalScreen() {
     }
   };
 
+  const handleDeleteVendor = async () => {
+    if (!effectiveVendorId) return;
+    try {
+      await deleteVendorMutation.mutateAsync({ vendorId: effectiveVendorId });
+      setSelectedVendorId(undefined);
+      await invalidateAll();
+      setFeedback("Vendor deleted successfully.");
+    } catch (err) {
+      setErrorMsg(friendlyError(err, "Could not delete vendor."));
+    }
+  };
+
+  // Access guard
   if (!user) {
     return (
       <Page>
@@ -330,106 +363,121 @@ export default function VendorPortalScreen() {
     );
   }
 
-  if (profileQuery.isLoading) {
+  if (user.role === "user" || user.role === "courier") {
     return (
       <Page>
         <Header title="Vendor Kitchen" back />
-        <Text style={{ color: C.muted }}>Loading your kitchen portal…</Text>
+        <Notice tone="error">This area is for vendors, admins, and moderators only.</Notice>
       </Page>
     );
   }
 
-  const shop = profileQuery.data?.shop;
+  if (profileQuery.isLoading || (isAdminOrMod && allVendorsQuery.isLoading)) {
+    return (
+      <Page>
+        <Header title="Vendor Kitchen" back />
+        <ActivityIndicator color={C.green} style={{ marginTop: 40 }} />
+        <Text style={{ color: C.muted, textAlign: "center", marginTop: 10 }}>Loading kitchen portal…</Text>
+      </Page>
+    );
+  }
+
+  const shop = profileQuery.data?.shop ?? (isAdminOrMod ? selectedVendor : undefined);
   const products = profileQuery.data?.products ?? [];
   const kitchenOrders = ordersQuery.data?.orders ?? [];
-  const activeOrdersCount = kitchenOrders.filter((o) => o.status === "placed" || o.status === "accepted" || o.status === "preparing").length;
+  const activeOrdersCount = kitchenOrders.filter(
+    (o) => o.status === "placed" || o.status === "accepted" || o.status === "preparing"
+  ).length;
+  const revenue = revenueQuery.data;
 
   return (
     <Page>
       <Header
-        title="Vendor Kitchen"
-        subtitle={shop?.name ?? "Kitchen Portal"}
+        title={isAdminOrMod ? "Vendor Manager" : "Vendor Kitchen"}
+        subtitle={shop?.name ?? (isAdminOrMod ? "Select a vendor" : "Kitchen Portal")}
         back
       />
 
-      {/* Vendor Profile Summary Banner */}
-      <View style={styles.shopHero}>
-        <View style={styles.shopHeroIcon}>
-          <Ionicons name="storefront" size={26} color={C.white} />
+      {/* Admin/Moderator Vendor Picker */}
+      {isAdminOrMod && (
+        <View style={styles.adminPickerBar}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.adminPickerLabel}>Viewing Vendor:</Text>
+            <Pressable onPress={() => setShowVendorPicker(true)} style={styles.vendorPickerButton}>
+              <Ionicons name="storefront-outline" size={16} color={C.green} />
+              <Text style={styles.vendorPickerText} numberOfLines={1}>
+                {shop?.name ?? "Select a vendor…"}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color={C.muted} />
+            </Pressable>
+          </View>
+          {isAdminOrMod && effectiveVendorId && (
+            <Pressable onPress={handleDeleteVendor} style={styles.deleteVendorBtn}>
+              <Ionicons name="trash-outline" size={18} color="#DC2626" />
+            </Pressable>
+          )}
         </View>
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text style={styles.shopHeroName}>{shop?.name ?? "My Campus Kitchen"}</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <View style={styles.badgePill}>
-              <Text style={styles.badgePillText}>⏱️ ~{shop?.etaMin ?? 20} min wait</Text>
-            </View>
-            <View
-              style={[
-                styles.badgePill,
-                { backgroundColor: shop?.isOpen ? "rgba(255,255,255,0.22)" : "rgba(220,38,38,0.25)" },
-              ]}
-            >
-              <Text style={styles.badgePillText}>{shop?.isOpen ? "● Open Now" : "○ Closed"}</Text>
+      )}
+
+      {/* Shop Hero Banner */}
+      {shop && (
+        <View style={styles.shopHero}>
+          <View style={styles.shopHeroIcon}>
+            <Ionicons name="storefront" size={26} color={C.white} />
+          </View>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={styles.shopHeroName}>{shop.name}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View style={styles.badgePill}>
+                <Text style={styles.badgePillText}>⏱️ ~{shop.etaMin} min wait</Text>
+              </View>
+              <View
+                style={[
+                  styles.badgePill,
+                  { backgroundColor: shop.isOpen ? "rgba(255,255,255,0.22)" : "rgba(220,38,38,0.25)" },
+                ]}
+              >
+                <Text style={styles.badgePillText}>{shop.isOpen ? "● Open Now" : "○ Closed"}</Text>
+              </View>
             </View>
           </View>
         </View>
-      </View>
+      )}
 
-      {/* Top Nav Tabs */}
+      {/* Tab Bar */}
       <View style={styles.tabBar}>
-        <Pressable
-          onPress={() => setActiveTab("orders")}
-          style={[styles.tabButton, activeTab === "orders" && styles.tabButtonActive]}
-        >
-          <Ionicons
-            name="receipt-outline"
-            size={18}
-            color={activeTab === "orders" ? C.white : C.ink}
-          />
-          <Text
-            style={[styles.tabButtonText, activeTab === "orders" && styles.tabButtonTextActive]}
-          >
-            Orders ({activeOrdersCount})
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setActiveTab("products")}
-          style={[styles.tabButton, activeTab === "products" && styles.tabButtonActive]}
-        >
-          <Ionicons
-            name="cube-outline"
-            size={18}
-            color={activeTab === "products" ? C.white : C.ink}
-          />
-          <Text
-            style={[styles.tabButtonText, activeTab === "products" && styles.tabButtonTextActive]}
-          >
-            Products ({products.length})
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setActiveTab("settings")}
-          style={[styles.tabButton, activeTab === "settings" && styles.tabButtonActive]}
-        >
-          <Ionicons
-            name="options-outline"
-            size={18}
-            color={activeTab === "settings" ? C.white : C.ink}
-          />
-          <Text
-            style={[styles.tabButtonText, activeTab === "settings" && styles.tabButtonTextActive]}
-          >
-            Kitchen Info
-          </Text>
-        </Pressable>
+        {(["orders", "products", "revenue", "settings"] as Tab[]).map((tab) => {
+          const icons: Record<Tab, any> = {
+            orders: "receipt-outline",
+            products: "cube-outline",
+            revenue: "stats-chart-outline",
+            settings: "options-outline",
+          };
+          const labels: Record<Tab, string> = {
+            orders: `Orders (${activeOrdersCount})`,
+            products: `Products (${products.length})`,
+            revenue: "Revenue",
+            settings: "Kitchen Info",
+          };
+          return (
+            <Pressable
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
+            >
+              <Ionicons name={icons[tab]} size={15} color={activeTab === tab ? C.white : C.ink} />
+              <Text style={[styles.tabButtonText, activeTab === tab && styles.tabButtonTextActive]}>
+                {labels[tab]}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {feedback ? <Notice tone="mango">{feedback}</Notice> : null}
       {errorMsg ? <Notice tone="error">{errorMsg}</Notice> : null}
 
-      {/* TAB 1: KITCHEN ORDERS */}
+      {/* TAB: ORDERS */}
       {activeTab === "orders" && (
         <View style={{ gap: 14 }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
@@ -464,7 +512,7 @@ export default function VendorPortalScreen() {
         </View>
       )}
 
-      {/* TAB 2: UPLOAD & MANAGE PRODUCTS */}
+      {/* TAB: PRODUCTS */}
       {activeTab === "products" && (
         <View style={{ gap: 14 }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
@@ -481,7 +529,7 @@ export default function VendorPortalScreen() {
               <Ionicons name="fast-food-outline" size={38} color={C.muted} />
               <Text style={styles.emptyTitle}>No products uploaded yet</Text>
               <Text style={styles.emptySub}>
-                Add food items, drinks, or combos so students on campus can order from you!
+                Add food items, drinks, or combos so students can order from this kitchen!
               </Text>
               <Button
                 title="Upload Your First Product"
@@ -503,9 +551,7 @@ export default function VendorPortalScreen() {
                   </View>
                   <Text style={styles.prodCategory}>{prod.category}</Text>
                   {prod.description ? (
-                    <Text style={styles.prodDesc} numberOfLines={2}>
-                      {prod.description}
-                    </Text>
+                    <Text style={styles.prodDesc} numberOfLines={2}>{prod.description}</Text>
                   ) : null}
                   <Text style={styles.prodPrice}>{formatGhs(prod.pricePesewas)}</Text>
                 </View>
@@ -522,11 +568,7 @@ export default function VendorPortalScreen() {
                       thumbColor={prod.isAvailable ? C.green : "#94A3B8"}
                     />
                   </View>
-
-                  <Pressable
-                    onPress={() => handleDeleteProduct(prod.id)}
-                    style={styles.deleteButton}
-                  >
+                  <Pressable onPress={() => handleDeleteProduct(prod.id)} style={styles.deleteButton}>
                     <Ionicons name="trash-outline" size={16} color="#DC2626" />
                   </Pressable>
                 </View>
@@ -536,7 +578,72 @@ export default function VendorPortalScreen() {
         </View>
       )}
 
-      {/* TAB 3: KITCHEN PROFILE & PREP WAIT TIME */}
+      {/* TAB: REVENUE */}
+      {activeTab === "revenue" && (
+        <View style={{ gap: 14 }}>
+          <Text style={styles.sectionTitle}>Revenue & Stats</Text>
+          {revenueQuery.isLoading ? (
+            <ActivityIndicator color={C.green} />
+          ) : (
+            <>
+              <View style={styles.revenueGrid}>
+                <View style={[styles.revenueCard, { backgroundColor: "#DCFCE7" }]}>
+                  <Ionicons name="cash-outline" size={24} color="#15803D" />
+                  <Text style={[styles.revenueValue, { color: "#15803D" }]}>
+                    {formatGhs(revenue?.totalRevenuePesewas ?? 0)}
+                  </Text>
+                  <Text style={styles.revenueLabel}>Total Revenue</Text>
+                </View>
+                <View style={[styles.revenueCard, { backgroundColor: "#DBEAFE" }]}>
+                  <Ionicons name="receipt-outline" size={24} color="#1D4ED8" />
+                  <Text style={[styles.revenueValue, { color: "#1D4ED8" }]}>
+                    {revenue?.totalOrders ?? 0}
+                  </Text>
+                  <Text style={styles.revenueLabel}>Total Orders</Text>
+                </View>
+                <View style={[styles.revenueCard, { backgroundColor: "#FEF3C7" }]}>
+                  <Ionicons name="time-outline" size={24} color="#B45309" />
+                  <Text style={[styles.revenueValue, { color: "#B45309" }]}>
+                    {revenue?.pendingOrders ?? 0}
+                  </Text>
+                  <Text style={styles.revenueLabel}>Pending Orders</Text>
+                </View>
+                <View style={[styles.revenueCard, { backgroundColor: "#F3E8FF" }]}>
+                  <Ionicons name="checkmark-circle-outline" size={24} color="#7C3AED" />
+                  <Text style={[styles.revenueValue, { color: "#7C3AED" }]}>
+                    {revenue?.completedOrders ?? 0}
+                  </Text>
+                  <Text style={styles.revenueLabel}>Completed</Text>
+                </View>
+              </View>
+
+              {/* Show all vendors summary for admin/moderator */}
+              {isAdminOrMod && allVendorsQuery.data && (
+                <View style={{ gap: 10, marginTop: 8 }}>
+                  <Text style={[styles.sectionTitle, { fontSize: 15 }]}>All Vendors Overview</Text>
+                  {allVendorsQuery.data.map((v) => (
+                    <View key={v.id} style={styles.vendorSummaryCard}>
+                      <View style={styles.vendorSummaryIcon}>
+                        <Ionicons name="storefront-outline" size={18} color={C.green} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.vendorSummaryName}>{v.name}</Text>
+                        <Text style={styles.vendorSummaryMeta}>{v.category} · {v.isOpen ? "Open" : "Closed"}</Text>
+                      </View>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text style={styles.vendorRevText}>{formatGhs(v.totalRevenuePesewas)}</Text>
+                        <Text style={styles.vendorOrdersText}>{v.totalOrders} orders</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
+        </View>
+      )}
+
+      {/* TAB: SETTINGS */}
       {activeTab === "settings" && (
         <View style={styles.settingsCard}>
           <Text style={styles.sectionTitle}>Kitchen Profile & Wait Time</Text>
@@ -694,11 +801,94 @@ export default function VendorPortalScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* MODAL: Vendor Picker (admin/mod only) */}
+      <Modal visible={showVendorPicker} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: "70%" }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Vendor</Text>
+              <Pressable onPress={() => setShowVendorPicker(false)}>
+                <Ionicons name="close" size={24} color={C.ink} />
+              </Pressable>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {allVendorsQuery.isLoading ? (
+                <ActivityIndicator color={C.green} style={{ marginTop: 20 }} />
+              ) : (
+                allVendorsQuery.data?.map((v) => (
+                  <Pressable
+                    key={v.id}
+                    style={[
+                      styles.vendorPickerItem,
+                      v.id === effectiveVendorId && styles.vendorPickerItemActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedVendorId(v.id);
+                      setShowVendorPicker(false);
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.vendorPickerItemName}>{v.name}</Text>
+                      <Text style={styles.vendorPickerItemMeta}>
+                        {v.category} · {v.isOpen ? "🟢 Open" : "🔴 Closed"} · {v.totalOrders} orders · {formatGhs(v.totalRevenuePesewas)} revenue
+                      </Text>
+                    </View>
+                    {v.id === effectiveVendorId && (
+                      <Ionicons name="checkmark-circle" size={20} color={C.green} />
+                    )}
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </Page>
   );
 }
 
 const styles = StyleSheet.create({
+  adminPickerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0FDF4",
+    borderRadius: 14,
+    padding: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  adminPickerLabel: {
+    fontSize: 11,
+    color: C.muted,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  vendorPickerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: C.white,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  vendorPickerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: C.ink,
+  },
+  deleteVendorBtn: {
+    padding: 10,
+    backgroundColor: "#FEE2E2",
+    borderRadius: 10,
+  },
   shopHero: {
     backgroundColor: C.green,
     borderRadius: 22,
@@ -736,34 +926,23 @@ const styles = StyleSheet.create({
     backgroundColor: C.sage,
     padding: 4,
     borderRadius: 16,
-    gap: 6,
+    gap: 4,
+    flexWrap: "wrap",
   },
   tabButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderRadius: 12,
-    gap: 6,
+    gap: 4,
+    minWidth: 70,
   },
-  tabButtonActive: {
-    backgroundColor: C.green,
-  },
-  tabButtonText: {
-    color: C.ink,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  tabButtonTextActive: {
-    color: C.white,
-    fontWeight: "900",
-  },
-  sectionTitle: {
-    color: C.ink,
-    fontSize: 18,
-    fontWeight: "900",
-  },
+  tabButtonActive: { backgroundColor: C.green },
+  tabButtonText: { color: C.ink, fontSize: 11, fontWeight: "700" },
+  tabButtonTextActive: { color: C.white, fontWeight: "900" },
+  sectionTitle: { color: C.ink, fontSize: 18, fontWeight: "900" },
   refreshPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -773,11 +952,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 10,
   },
-  refreshPillText: {
-    color: C.green,
-    fontSize: 11,
-    fontWeight: "700",
-  },
+  refreshPillText: { color: C.green, fontSize: 11, fontWeight: "700" },
   emptyCard: {
     backgroundColor: C.white,
     borderRadius: 20,
@@ -787,118 +962,44 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     gap: 8,
   },
-  emptyTitle: {
-    color: C.ink,
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  emptySub: {
-    color: C.muted,
-    fontSize: 13,
-    textAlign: "center",
-    lineHeight: 18,
-  },
+  emptyTitle: { color: C.ink, fontSize: 16, fontWeight: "800" },
+  emptySub: { color: C.muted, fontSize: 13, textAlign: "center", lineHeight: 18 },
   orderCard: {
     backgroundColor: C.white,
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 16,
     borderWidth: 1,
     borderColor: C.border,
     gap: 12,
   },
-  orderHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  orderCode: {
-    color: C.ink,
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  statusBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  orderAddress: {
-    color: C.muted,
-    fontSize: 12,
-  },
-  itemsList: {
-    borderTopWidth: 1,
-    borderColor: C.border,
-    paddingTop: 10,
-    gap: 6,
-  },
-  itemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  itemQty: {
-    color: C.green,
-    fontWeight: "900",
-    fontSize: 13,
-  },
-  itemName: {
-    color: C.ink,
-    fontSize: 13,
-    fontWeight: "700",
-    flex: 1,
-  },
-  itemPrice: {
-    color: C.ink,
-    fontWeight: "800",
-    fontSize: 13,
-  },
+  orderHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  orderCode: { fontSize: 15, fontWeight: "900", color: C.ink },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  statusBadgeText: { fontSize: 11, fontWeight: "800" },
+  orderAddress: { fontSize: 12, color: C.muted },
+  itemsList: { gap: 4 },
+  itemRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  itemQty: { fontSize: 13, fontWeight: "700", color: C.muted, width: 26 },
+  itemName: { flex: 1, fontSize: 13, color: C.ink },
+  itemPrice: { fontSize: 13, fontWeight: "700", color: C.ink },
   prepTimerContainer: {
-    backgroundColor: "#FFFBEB",
-    borderRadius: 14,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 12,
     padding: 12,
-    borderWidth: 1,
-    borderColor: "#FDE68A",
     gap: 8,
   },
-  prepTimerHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  prepTimerTitle: {
-    color: "#B45309",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  prepCountdownText: {
-    color: "#92400E",
-    fontSize: 13,
-    fontWeight: "900",
-  },
+  prepTimerHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  prepTimerTitle: { fontSize: 13, fontWeight: "800", color: "#B45309" },
+  prepCountdownText: { fontSize: 14, fontWeight: "900", color: "#B45309" },
   progressBarTrack: {
     height: 6,
     backgroundColor: "#FDE68A",
-    borderRadius: 3,
+    borderRadius: 4,
     overflow: "hidden",
   },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#F59E0B",
-    borderRadius: 3,
-  },
-  prepNotice: {
-    color: "#78350F",
-    fontSize: 11,
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 4,
-  },
+  progressBarFill: { height: "100%", backgroundColor: "#D97706", borderRadius: 4 },
+  prepNotice: { fontSize: 11, color: "#92400E" },
+  actionRow: { flexDirection: "row", gap: 10 },
   onWayBanner: {
     flex: 1,
     flexDirection: "row",
@@ -906,125 +1007,132 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     backgroundColor: "#DCFCE7",
-    paddingVertical: 10,
-    borderRadius: 14,
+    borderRadius: 12,
+    padding: 12,
   },
-  onWayBannerText: {
-    color: "#15803D",
-    fontSize: 13,
-    fontWeight: "800",
-  },
+  onWayBannerText: { color: "#15803D", fontWeight: "700", fontSize: 13 },
   productCard: {
     backgroundColor: C.white,
-    borderRadius: 18,
-    padding: 15,
-    borderWidth: 1,
-    borderColor: C.border,
+    borderRadius: 16,
+    padding: 14,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    gap: 10,
   },
-  prodName: {
-    color: C.ink,
-    fontSize: 15,
-    fontWeight: "900",
-  },
+  prodName: { fontSize: 15, fontWeight: "800", color: C.ink },
+  prodCategory: { fontSize: 12, color: C.muted, fontWeight: "600" },
+  prodDesc: { fontSize: 12, color: C.muted, lineHeight: 16 },
+  prodPrice: { fontSize: 15, fontWeight: "900", color: C.green },
   prodBadgePill: {
-    backgroundColor: C.paleMango,
-    paddingHorizontal: 7,
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
   },
-  prodBadgeText: {
-    color: "#9A661E",
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  prodCategory: {
-    color: C.muted,
-    fontSize: 12,
-  },
-  prodDesc: {
-    color: C.muted,
-    fontSize: 12,
-  },
-  prodPrice: {
-    color: C.green,
-    fontSize: 14,
-    fontWeight: "900",
-    marginTop: 2,
-  },
+  prodBadgeText: { fontSize: 10, fontWeight: "800", color: "#B45309" },
   deleteButton: {
-    padding: 6,
-    borderRadius: 8,
+    padding: 8,
     backgroundColor: "#FEE2E2",
+    borderRadius: 10,
   },
+  revenueGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  revenueCard: {
+    flex: 1,
+    minWidth: "44%",
+    borderRadius: 18,
+    padding: 18,
+    alignItems: "center",
+    gap: 6,
+  },
+  revenueValue: { fontSize: 20, fontWeight: "900" },
+  revenueLabel: { fontSize: 12, color: C.muted, fontWeight: "700", textAlign: "center" },
+  vendorSummaryCard: {
+    backgroundColor: C.white,
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  vendorSummaryIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: "#DCFCE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  vendorSummaryName: { fontSize: 14, fontWeight: "800", color: C.ink },
+  vendorSummaryMeta: { fontSize: 12, color: C.muted, marginTop: 2 },
+  vendorRevText: { fontSize: 14, fontWeight: "900", color: "#15803D" },
+  vendorOrdersText: { fontSize: 11, color: C.muted, fontWeight: "600" },
   settingsCard: {
     backgroundColor: C.white,
     borderRadius: 20,
-    padding: 18,
+    padding: 20,
+    gap: 16,
     borderWidth: 1,
     borderColor: C.border,
-    gap: 14,
   },
-  inputGroup: {
-    gap: 6,
-  },
-  inputLabel: {
-    color: C.ink,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  inputHelper: {
-    color: C.muted,
-    fontSize: 11,
-    lineHeight: 15,
-  },
+  inputGroup: { gap: 6 },
+  inputLabel: { fontSize: 13, fontWeight: "700", color: C.ink },
+  inputHelper: { fontSize: 11, color: C.muted, lineHeight: 15 },
   textInput: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: C.sage,
+    borderRadius: 12,
+    padding: 13,
+    fontSize: 14,
+    color: C.ink,
     borderWidth: 1,
     borderColor: C.border,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    color: C.ink,
-    fontSize: 14,
   },
   switchRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 4,
+    gap: 12,
+    backgroundColor: C.sage,
+    borderRadius: 14,
+    padding: 14,
   },
-  switchTitle: {
-    color: C.ink,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  switchSub: {
-    color: C.muted,
-    fontSize: 12,
-  },
+  switchTitle: { fontSize: 14, fontWeight: "800", color: C.ink },
+  switchSub: { fontSize: 12, color: C.muted, marginTop: 2 },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "flex-end",
   },
   modalContent: {
     backgroundColor: C.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    maxHeight: "85%",
-    gap: 14,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    gap: 16,
+    maxHeight: "90%",
   },
-  modalHeader: {
+  modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  modalTitle: { fontSize: 20, fontWeight: "900", color: C.ink },
+  vendorPickerItem: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 6,
+    backgroundColor: C.sage,
   },
-  modalTitle: {
-    color: C.ink,
-    fontSize: 18,
-    fontWeight: "900",
+  vendorPickerItemActive: {
+    backgroundColor: "#DCFCE7",
+    borderWidth: 1.5,
+    borderColor: C.green,
   },
+  vendorPickerItemName: { fontSize: 14, fontWeight: "800", color: C.ink },
+  vendorPickerItemMeta: { fontSize: 12, color: C.muted, marginTop: 2 },
 });
