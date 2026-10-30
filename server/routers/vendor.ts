@@ -282,6 +282,12 @@ export const vendorRouter = router({
 
       if (!found) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor profile not found. Please insert and save your vendor profile first." });
 
+      // For regular vendors, double-lock the WHERE to both id AND userId so the
+      // update can never touch another user's record even under unexpected state.
+      const updateWhere = isAdminOrMod
+        ? eq(vendors.id, found.id)
+        : and(eq(vendors.id, found.id), eq(vendors.userId, ctx.user.id));
+
       await db
         .update(vendors)
         .set({
@@ -292,7 +298,7 @@ export const vendorRouter = router({
           isOpen: input.isOpen,
           deliveryFeePesewas: input.deliveryFeePesewas ?? found.deliveryFeePesewas,
         })
-        .where(eq(vendors.id, found.id));
+        .where(updateWhere);
 
       return { success: true };
     }),
@@ -473,9 +479,9 @@ export const vendorRouter = router({
 
       if (!targetVendorId) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor profile not found." });
 
+      // Hard-delete the product so it no longer appears on the catalog
       await db
-        .update(products)
-        .set({ isAvailable: 0 })
+        .delete(products)
         .where(and(eq(products.id, input.productId), eq(products.vendorId, targetVendorId)));
 
       return { success: true };
