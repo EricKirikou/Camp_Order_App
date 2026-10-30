@@ -139,6 +139,125 @@ export const riderRouter = router({
       return { id: order.id, status: "accepted" as const };
     }),
 
+  /** Get courier's earnings summary (total earned, completed deliveries count, active deliveries) */
+  getEarnings: protectedProcedure.query(async ({ ctx }) => {
+    ensureCourier(ctx.user.role);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database unavailable." });
+
+    const completedOrders = await db
+      .select({
+        id: orders.id,
+        deliveryFeePesewas: orders.deliveryFeePesewas,
+        updatedAt: orders.updatedAt,
+      })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.courierId, ctx.user.id),
+          eq(orders.status, "completed"),
+          isNull(orders.deletedAt)
+        )
+      );
+
+    // Each delivery pays delivery fee + service fee pay (default 300 pesewas service bonus)
+    const SERVICE_FEE_PAY_PESEWAS = 300;
+    let totalDeliveryPesewas = 0;
+    let totalServicePesewas = 0;
+
+    for (const ord of completedOrders) {
+      const fee = ord.deliveryFeePesewas || 500;
+      totalDeliveryPesewas += fee;
+      totalServicePesewas += SERVICE_FEE_PAY_PESEWAS;
+    }
+
+    const totalPayoutPesewas = totalDeliveryPesewas + totalServicePesewas;
+
+    return {
+      totalPayoutPesewas,
+      totalDeliveryPesewas,
+      totalServicePesewas,
+      completedCount: completedOrders.length,
+      serviceFeePayPerOrderPesewas: SERVICE_FEE_PAY_PESEWAS,
+    };
+  }),
+
+  /** Mark order as delivered by verifying the 6-digit confirmation code provided by the receiver */
+  confirmDelivery: protectedProcedure
+    .input(
+      z.object({
+        orderId: z.number().int().positive(),
+        confirmationCode: z.string().trim().length(6),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      ensureCourier(ctx.user.role);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database unavailable." });
+
+      const found = await db
+        .select()
+        .from(orders)
+        .where(and(eq(orders.id, input.orderId), isNull(orders.deletedAt)))
+        .limit(1);
+
+      if (!found[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
+      const order = found[0];
+
+      // Derive expected 6-digit confirmation code from orderCode or id
+      const digitsOnly = order.orderCode.replace(/\D/g, "");
+      const expectedCode = digitsOnly.length >= 6
+        ? digitsOnly.slice(-6)
+        : String(order.id * 831417).padStart(6, "0").slice(-6);
+
+      if (input.confirmationCode !== expectedCode) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Incorrect 6-digit confirmation code. Please ask the receiver for their delivery code.",
+        });
+      }
+
+      const now = new Date();
+      await db
+        .update(orders)
+        .set({
+          status: "completed",
+          updatedAt: now,
+        })
+        .where(eq(orders.id, order.id));
+
+      const fee = order.deliveryFeePesewas || 500;
+      const serviceBonus = 300;
+      const totalPayout = fee + serviceBonus;
+
+      try {
+        await db.insert(orderAuditLogs).values({
+          orderId: order.id,
+          orderCode: order.orderCode,
+          action: "rider_delivered_confirmed_code",
+          actorUserId: ctx.user.id,
+          actorName: ctx.user.name ?? "Courier",
+          actorEmail: ctx.user.email ?? null,
+          snapshot: JSON.stringify({
+            previousStatus: order.status,
+            newStatus: "completed",
+            courierUserId: ctx.user.id,
+            totalPayoutPesewas: totalPayout,
+            deliveryFeePesewas: fee,
+            serviceFeeBonusPesewas: serviceBonus,
+            completedAt: now.toISOString(),
+          }),
+        });
+      } catch {}
+
+      return {
+        success: true,
+        orderId: order.id,
+        status: "completed" as const,
+        earnedPesewas: totalPayout,
+      };
+    }),
+
   updateStatus: protectedProcedure
     .input(
       z.object({

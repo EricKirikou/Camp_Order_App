@@ -63,7 +63,13 @@ export const ordersRouter = router({
       if (cour[0]) courierInfo = cour[0];
     }
 
-    return { ...found[0], items, vendor: vendorInfo, courier: courierInfo };
+    // 6-digit confirmation code for the receiver to give to the courier
+    const digitsOnly = found[0].orderCode.replace(/\D/g, "");
+    const deliveryConfirmationCode = digitsOnly.length >= 6
+      ? digitsOnly.slice(-6)
+      : String(found[0].id * 831417).padStart(6, "0").slice(-6);
+
+    return { ...found[0], items, vendor: vendorInfo, courier: courierInfo, deliveryConfirmationCode };
   }),
 
   reorder: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {

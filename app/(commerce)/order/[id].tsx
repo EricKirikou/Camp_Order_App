@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { Platform, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Platform, Pressable, Text, TextInput, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { Button, C, Header, Notice, Page } from "@/components/camporder/ui";
 import { formatGhs, friendlyError, ORDER_STATUS_LABEL } from "@/lib/camporder/format";
@@ -93,9 +93,13 @@ export default function OrderDetailsScreen() {
   const retryPayment = trpc.payments.retryPayment.useMutation();
   const reorder = trpc.orders.reorder.useMutation();
   const cancelOrder = trpc.orders.cancel.useMutation();
+  const confirmDelivery = trpc.rider.confirmDelivery.useMutation();
   const [actionError, setActionError] = useState("");
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelSuccess, setCancelSuccess] = useState(false);
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [inputDeliveryCode, setInputDeliveryCode] = useState("");
+  const [deliverySuccessMessage, setDeliverySuccessMessage] = useState("");
 
   if (order.isLoading) return <Page><Header title="Order tracking" back /><Text style={{ color: C.muted }}>Checking order status…</Text></Page>;
   if (!order.data) return <Page><Header title="Order tracking" back /><Notice tone="error">Order not found or not available for this account.</Notice><Button title="View my orders" onPress={() => router.replace("/(tabs)/orders")} /></Page>;
@@ -210,6 +214,44 @@ export default function OrderDetailsScreen() {
       />
     ) : null}
 
+    {/* 6-Digit Delivery Confirmation Code for the Receiver / Customer */}
+    {data.status === "on_the_way" && data.deliveryConfirmationCode && (!user || user.id !== data.courierId) && (
+      <View style={{
+        backgroundColor: "#FEFCE8",
+        borderRadius: 20,
+        padding: 18,
+        borderWidth: 2,
+        borderColor: "#FACC15",
+        alignItems: "center",
+        gap: 8,
+      }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Ionicons name="key-outline" size={20} color="#854D0E" />
+          <Text style={{ fontSize: 13, fontWeight: "800", color: "#854D0E", letterSpacing: 0.5, textTransform: "uppercase" }}>
+            Delivery Confirmation Code
+          </Text>
+        </View>
+
+        <Text style={{ fontSize: 13, color: "#713F12", textAlign: "center", lineHeight: 18 }}>
+          Give this 6-digit code to the rider when they hand you your order:
+        </Text>
+
+        <View style={{
+          backgroundColor: "#FFFBEB",
+          paddingHorizontal: 22,
+          paddingVertical: 10,
+          borderRadius: 14,
+          borderWidth: 1.5,
+          borderColor: "#EAB308",
+          marginTop: 4,
+        }}>
+          <Text style={{ fontSize: 28, fontWeight: "900", letterSpacing: 6, color: "#854D0E" }}>
+            {data.deliveryConfirmationCode}
+          </Text>
+        </View>
+      </View>
+    )}
+
     {/* Dedicated Banner for the Rider who accepted the order */}
     {user && (user.id === data.courierId || user.role === "courier") && (data.status === "on_the_way" || data.status === "preparing") && (
       <View style={{
@@ -258,7 +300,7 @@ export default function OrderDetailsScreen() {
           lineHeight: 18,
         }}>
           {data.status === "on_the_way"
-            ? `The vendor finished cooking! Pick up the order from ${data.vendor?.name ?? "the kitchen"} and drop off at ${data.deliveryAddress}.`
+            ? `The vendor finished cooking! Pick up the order from ${data.vendor?.name ?? "the kitchen"} and drop off at ${data.deliveryAddress}. When you deliver, enter the 6-digit code from the receiver to get paid automatically!`
             : `The vendor is currently preparing the dishes (~${data.vendor?.etaMin ?? 20} min wait). Once completed, this screen will notify you immediately.`}
         </Text>
       </View>
@@ -339,22 +381,134 @@ export default function OrderDetailsScreen() {
 
     <Button title="Re-order items to cart" icon="cart-outline" variant="outline" onPress={() => void handleReorder()} loading={reorder.isPending} />
 
-    {/* Courier Action: Complete Delivery */}
+    {deliverySuccessMessage ? (
+      <View style={{ backgroundColor: "#DCFCE7", padding: 16, borderRadius: 18, borderWidth: 1.5, borderColor: "#86EFAC", gap: 6, marginVertical: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Ionicons name="checkmark-circle" size={24} color="#15803D" />
+          <Text style={{ fontSize: 16, fontWeight: "900", color: "#15803D" }}>Delivery Completed & Paid! 🎉</Text>
+        </View>
+        <Text style={{ fontSize: 13, color: "#166534", lineHeight: 18 }}>
+          {deliverySuccessMessage}
+        </Text>
+      </View>
+    ) : null}
+
+    {/* Courier Action: Complete Delivery with 6-digit code */}
     {user && (user.id === data.courierId || user.role === "courier") && data.status === "on_the_way" && (
       <Button
-        title="Mark as Delivered to Student ✅"
+        title="Confirm Delivery (Enter 6-Digit Code) 📦"
         variant="primary"
         style={{ backgroundColor: "#15803D" }}
-        onPress={async () => {
-          try {
-            await utils.client.rider.updateStatus.mutate({ orderId: data.id, status: "completed" });
-            await utils.orders.byId.invalidate({ id: data.id });
-          } catch (e) {
-            setActionError(friendlyError(e, "Could not complete delivery"));
-          }
+        onPress={() => {
+          setInputDeliveryCode("");
+          setActionError("");
+          setShowDeliveryModal(true);
         }}
       />
     )}
+
+    {/* 6-Digit Code Entry Modal for Rider */}
+    <Modal
+      visible={showDeliveryModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowDeliveryModal(false)}
+    >
+      <View style={{
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.6)",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 20,
+      }}>
+        <View style={{
+          backgroundColor: C.white,
+          borderRadius: 24,
+          padding: 24,
+          width: "100%",
+          maxWidth: 380,
+          gap: 14,
+          borderWidth: 1,
+          borderColor: C.border,
+        }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#DCFCE7", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="key" size={20} color="#15803D" />
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: "900", color: C.ink }}>Confirm Delivery</Text>
+            </View>
+            <Pressable onPress={() => setShowDeliveryModal(false)} hitSlop={10}>
+              <Ionicons name="close" size={22} color={C.muted} />
+            </Pressable>
+          </View>
+
+          <Text style={{ fontSize: 13, color: C.muted, lineHeight: 18 }}>
+            Ask the receiver for their <Text style={{ fontWeight: "800", color: C.ink }}>6-digit confirmation code</Text> shown on their order tracking screen:
+          </Text>
+
+          <TextInput
+            value={inputDeliveryCode}
+            onChangeText={(text) => setInputDeliveryCode(text.replace(/\D/g, "").slice(0, 6))}
+            placeholder="000000"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="number-pad"
+            maxLength={6}
+            style={{
+              backgroundColor: C.sage,
+              borderRadius: 16,
+              paddingVertical: 14,
+              fontSize: 26,
+              fontWeight: "900",
+              letterSpacing: 8,
+              textAlign: "center",
+              color: C.ink,
+              borderWidth: 1.5,
+              borderColor: C.border,
+            }}
+          />
+
+          <View style={{ backgroundColor: "#F0FDF4", padding: 12, borderRadius: 14, borderWidth: 1, borderColor: "#BBF7D0", gap: 3 }}>
+            <Text style={{ fontSize: 11, fontWeight: "800", color: "#15803D", textTransform: "uppercase" }}>💰 Instant Automatic Payout:</Text>
+            <Text style={{ fontSize: 13, color: "#166534" }}>
+              Delivery Fee ({formatGhs(data.deliveryFeePesewas || 500)}) + Service Fee Bonus ({formatGhs(300)}) = <Text style={{ fontWeight: "900", color: "#15803D" }}>{formatGhs((data.deliveryFeePesewas || 500) + 300)}</Text>
+            </Text>
+          </View>
+
+          <View style={{ gap: 10, marginTop: 4 }}>
+            <Button
+              title={confirmDelivery.isPending ? "Verifying & Crediting..." : "Verify & Complete Delivery"}
+              variant="primary"
+              loading={confirmDelivery.isPending}
+              disabled={inputDeliveryCode.length !== 6 || confirmDelivery.isPending}
+              style={{ backgroundColor: "#15803D" }}
+              onPress={async () => {
+                setActionError("");
+                try {
+                  const res = await confirmDelivery.mutateAsync({
+                    orderId: data.id,
+                    confirmationCode: inputDeliveryCode,
+                  });
+                  setShowDeliveryModal(false);
+                  setDeliverySuccessMessage(`Order marked delivered! You earned ${formatGhs(res.earnedPesewas)} delivery + service fee.`);
+                  await utils.orders.byId.invalidate({ id: data.id });
+                  await utils.rider.pendingOrders.invalidate();
+                  await utils.rider.getEarnings.invalidate();
+                } catch (err) {
+                  setActionError(friendlyError(err, "Invalid 6-digit confirmation code. Please check with customer."));
+                }
+              }}
+            />
+
+            <Button
+              title="Cancel"
+              variant="outline"
+              onPress={() => setShowDeliveryModal(false)}
+            />
+          </View>
+        </View>
+      </View>
+    </Modal>
 
     <Button title="Back to orders" variant="outline" onPress={() => router.replace(user?.role === "courier" ? "/(commerce)/rider/dashboard" : "/(tabs)/orders")} />
   </Page>;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Pressable, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, C, Header, Notice, Page } from '@/components/camporder/ui';
@@ -21,6 +21,16 @@ export default function RiderDashboard() {
   const [loadingId, setLoadingId] = useState<number | null>(null);
   const [dismissedOrderIds, setDismissedOrderIds] = useState<number[]>([]);
 
+  const [confirmModalOrder, setConfirmModalOrder] = useState<any | null>(null);
+  const [inputCode, setInputCode] = useState("");
+  const [confirmError, setConfirmError] = useState("");
+  const [payoutSuccess, setPayoutSuccess] = useState<string | null>(null);
+
+  // Fetch rider earnings and completed delivery count in real-time
+  const { data: earnings, refetch: refetchEarnings } = trpc.rider.getEarnings.useQuery(undefined, {
+    refetchInterval: 5000,
+  });
+
   // Fetch pending orders and poll every 5 seconds so new orders pop up automatically
   const { data: pendingOrders, isLoading, error, refetch, isRefetching } = trpc.rider.pendingOrders.useQuery(undefined, {
     refetchInterval: 5000,
@@ -36,12 +46,43 @@ export default function RiderDashboard() {
     },
   });
 
+  const confirmDelivery = trpc.rider.confirmDelivery.useMutation({
+    onSuccess: (res) => {
+      utils.rider.pendingOrders.invalidate();
+      utils.rider.getEarnings.invalidate();
+      setPayoutSuccess(`Order delivered! ${formatCurrency(res.earnedPesewas)} delivery and service pay credited to your account.`);
+      setConfirmModalOrder(null);
+      setInputCode("");
+      setConfirmError("");
+    },
+    onError: (err: any) => {
+      setConfirmError(err?.message || "Incorrect 6-digit confirmation code. Please ask the receiver.");
+    },
+  });
+
   const handleAccept = async (orderId: number) => {
     setLoadingId(orderId);
     try {
       await acceptOrder.mutateAsync({ orderId });
     } finally {
       setLoadingId(null);
+    }
+  };
+
+  const handleConfirmDelivery = async () => {
+    if (!confirmModalOrder) return;
+    if (inputCode.trim().length !== 6) {
+      setConfirmError("Please enter the complete 6-digit confirmation code.");
+      return;
+    }
+    setConfirmError("");
+    try {
+      await confirmDelivery.mutateAsync({
+        orderId: confirmModalOrder.id,
+        confirmationCode: inputCode.trim(),
+      });
+    } catch {
+      // Handled in onError
     }
   };
 
@@ -75,9 +116,139 @@ export default function RiderDashboard() {
     );
   }
 
+  const totalPayout = earnings?.totalPayoutPesewas ?? 0;
+  const completedCount = earnings?.completedCount ?? 0;
+
   return (
     <Page scroll={false}>
-      <Header title="Rider Dashboard" subtitle="Campus courier dispatches" back />
+      <Header title="Rider Dashboard" subtitle="Campus courier dispatches & earnings" back />
+
+      {/* Rider Earnings & Payment Summary Card */}
+      <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
+        <View style={styles.earningsCard}>
+          <View style={styles.earningsTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.earningsLabel}>TOTAL COURIER PAY</Text>
+              <Text style={styles.earningsAmount}>{formatCurrency(totalPayout)}</Text>
+            </View>
+            <View style={styles.completedBadge}>
+              <Ionicons name="checkmark-done-circle" size={18} color="#15803D" />
+              <Text style={styles.completedBadgeText}>
+                {completedCount} {completedCount === 1 ? 'Delivery' : 'Deliveries'} Done
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.earningsRateRow}>
+            <Ionicons name="flash" size={14} color="#D97706" />
+            <Text style={styles.earningsRateText}>
+              Automatic pay: GH₵5.00 delivery + GH₵3.00 service fee = GH₵8.00 per drop-off
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Delivery Confirmation 6-Digit PIN Modal */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={Boolean(confirmModalOrder)}
+        onRequestClose={() => setConfirmModalOrder(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Pressable
+              onPress={() => setConfirmModalOrder(null)}
+              style={styles.modalCloseBtn}
+              hitSlop={10}
+            >
+              <Ionicons name="close" size={20} color={C.muted} />
+            </Pressable>
+
+            <View style={[styles.modalIconBadge, { backgroundColor: '#DCFCE7' }]}>
+              <Ionicons name="key" size={32} color="#15803D" />
+            </View>
+
+            <Text style={styles.modalTitle}>Confirm Delivery 📦</Text>
+            <Text style={styles.modalSubtitle}>
+              Ask the receiver for their 6-digit code to confirm receipt and release your delivery payment automatically.
+            </Text>
+
+            {confirmModalOrder && (
+              <View style={styles.orderDetailsBox}>
+                <View style={styles.orderDetailRow}>
+                  <Ionicons name="restaurant-outline" size={16} color={C.green} />
+                  <Text style={styles.orderDetailTextBold} numberOfLines={1}>
+                    {confirmModalOrder.restaurantName}
+                  </Text>
+                </View>
+                <View style={styles.orderDetailRow}>
+                  <Ionicons name="location-outline" size={16} color={C.coral} />
+                  <Text style={styles.orderDetailText} numberOfLines={1}>
+                    Drop-off: {confirmModalOrder.dropoffAddress}
+                  </Text>
+                </View>
+                <View style={styles.payoutHighlightRow}>
+                  <Text style={styles.payoutLabel}>Payment You Will Receive:</Text>
+                  <View style={styles.payoutBadge}>
+                    <Text style={styles.payoutBadgeText}>GH₵8.00 (Pay + Bonus)</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            <View style={{ width: '100%', marginVertical: 6 }}>
+              <Text style={{ fontSize: 12, fontWeight: '800', color: C.ink, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Enter Receiver's 6-Digit Code:
+              </Text>
+              <TextInput
+                style={styles.codeInput}
+                placeholder="••••••"
+                placeholderTextColor="#9CA3AF"
+                value={inputCode}
+                onChangeText={(val) => setInputCode(val.replace(/\D/g, "").slice(0, 6))}
+                keyboardType="number-pad"
+                maxLength={6}
+                autoFocus
+              />
+            </View>
+
+            {confirmError ? (
+              <View style={styles.modalErrorBox}>
+                <Ionicons name="alert-circle" size={16} color="#DC2626" />
+                <Text style={styles.modalErrorText}>{confirmError}</Text>
+              </View>
+            ) : null}
+
+            <View style={{ gap: 10, width: '100%', marginTop: 8 }}>
+              <Button
+                title={confirmDelivery.isPending ? "Verifying..." : "Verify Code & Get Paid 💰"}
+                loading={confirmDelivery.isPending}
+                disabled={inputCode.trim().length !== 6 || confirmDelivery.isPending}
+                style={{ backgroundColor: "#15803D" }}
+                onPress={() => void handleConfirmDelivery()}
+              />
+              <Button
+                title="Cancel"
+                variant="quiet"
+                onPress={() => setConfirmModalOrder(null)}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {payoutSuccess ? (
+        <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
+          <View style={styles.payoutSuccessNotice}>
+            <Ionicons name="checkmark-circle" size={20} color="#15803D" />
+            <Text style={styles.payoutSuccessText}>{payoutSuccess}</Text>
+            <Pressable onPress={() => setPayoutSuccess(null)} hitSlop={10}>
+              <Ionicons name="close" size={18} color="#15803D" />
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       {/* Pop-up modal if only there is an order in the system that hasn't been accepted */}
       <Modal
@@ -277,8 +448,9 @@ export default function RiderDashboard() {
                   {/* Card Footer with Payout and Actions */}
                   <View style={styles.cardFooter}>
                     <View>
-                      <Text style={styles.payoutLabel}>Earnings</Text>
-                      <Text style={styles.payout}>{formatCurrency(item.payout)}</Text>
+                      <Text style={styles.payoutLabel}>Total Payout</Text>
+                      <Text style={styles.payout}>GH₵8.00</Text>
+                      <Text style={{ fontSize: 10, color: C.muted, fontWeight: '600' }}>GH₵5 fee + GH₵3 service</Text>
                     </View>
 
                     {isUnaccepted ? (
@@ -294,15 +466,32 @@ export default function RiderDashboard() {
                         )}
                       </TouchableOpacity>
                     ) : (
-                      <TouchableOpacity
-                        style={[styles.acceptButton, isPrepared ? styles.acceptButtonPrepared : styles.acceptButtonSecondary]}
-                        onPress={() => router.push({ pathname: "/(commerce)/order/[id]", params: { id: String(item.id) } })}
-                      >
-                        <Ionicons name={isPrepared ? "navigate-outline" : "eye-outline"} size={16} color="#fff" style={{ marginRight: 4 }} />
-                        <Text style={styles.buttonText}>
-                          {isPrepared ? "Open Delivery & Map" : "View Order Details"}
-                        </Text>
-                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                        {/* Delivered button allows rider to directly tick and enter the 6-digit receiver code */}
+                        {(isPrepared || item.status === "on_the_way") && (
+                          <TouchableOpacity
+                            style={[styles.acceptButton, { backgroundColor: '#15803D' }]}
+                            onPress={() => {
+                              setConfirmModalOrder(item);
+                              setInputCode("");
+                              setConfirmError("");
+                            }}
+                          >
+                            <Ionicons name="checkmark-done" size={16} color="#fff" style={{ marginRight: 4 }} />
+                            <Text style={styles.buttonText}>Delivered ✅</Text>
+                          </TouchableOpacity>
+                        )}
+
+                        <TouchableOpacity
+                          style={[styles.acceptButton, styles.acceptButtonSecondary]}
+                          onPress={() => router.push({ pathname: "/(commerce)/order/[id]", params: { id: String(item.id) } })}
+                        >
+                          <Ionicons name={isPrepared ? "navigate-outline" : "eye-outline"} size={16} color="#fff" style={{ marginRight: 4 }} />
+                          <Text style={styles.buttonText}>
+                            {isPrepared ? "Map" : "View"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     )}
                   </View>
                 </View>
@@ -583,5 +772,117 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
     color: C.greenDark,
+  },
+
+  // Earnings Card Styles
+  earningsCard: {
+    backgroundColor: '#052E16',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: '#15803D',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 4,
+    gap: 12,
+  },
+  earningsTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  earningsLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#86EFAC',
+    letterSpacing: 0.8,
+  },
+  earningsAmount: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    marginTop: 2,
+    letterSpacing: -0.5,
+  },
+  completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  completedBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#15803D',
+  },
+  earningsRateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  earningsRateText: {
+    fontSize: 12,
+    color: '#D1FAE5',
+    fontWeight: '600',
+    flex: 1,
+  },
+
+  // 6-Digit Code Input
+  codeInput: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 2,
+    borderColor: '#15803D',
+    borderRadius: 14,
+    paddingVertical: 14,
+    fontSize: 26,
+    fontWeight: '900',
+    textAlign: 'center',
+    letterSpacing: 8,
+    color: C.ink,
+  },
+  modalErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 10,
+    padding: 10,
+    width: '100%',
+    marginTop: 4,
+  },
+  modalErrorText: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '700',
+    flex: 1,
+  },
+
+  // Payout Success Notice
+  payoutSuccessNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1.5,
+    borderColor: '#86EFAC',
+    padding: 14,
+    borderRadius: 16,
+  },
+  payoutSuccessText: {
+    fontSize: 13,
+    color: '#15803D',
+    fontWeight: '700',
+    flex: 1,
+    lineHeight: 18,
   },
 });
