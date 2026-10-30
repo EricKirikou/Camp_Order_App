@@ -17,6 +17,72 @@ function requireVendorAccess(role?: string) {
   }
 }
 
+/** Helper to find the vendor belonging to a user, or link an unassigned existing vendor */
+async function resolveVendorForUser(db: any, userId: number, userRole: string, userName?: string | null, campusIdInput?: number | null) {
+  // 1. First check if a vendor is already linked to this userId
+  const linked = await db
+    .select()
+    .from(vendors)
+    .where(eq(vendors.userId, userId))
+    .limit(1);
+
+  if (linked[0]) return linked[0];
+
+  // 2. If no vendor is linked yet and this is a vendor account, check for existing unassigned vendors in the DB
+  if (userRole === "vendor") {
+    const unassigned = await db
+      .select()
+      .from(vendors)
+      .where(isNull(vendors.userId))
+      .orderBy(vendors.id)
+      .limit(1);
+
+    if (unassigned[0]) {
+      // Auto-assign this existing database vendor to this vendor user so their products & kitchen load!
+      await db
+        .update(vendors)
+        .set({ userId })
+        .where(eq(vendors.id, unassigned[0].id));
+
+      const updated = await db
+        .select()
+        .from(vendors)
+        .where(eq(vendors.id, unassigned[0].id))
+        .limit(1);
+
+      return updated[0] ?? unassigned[0];
+    }
+
+    // 3. If there are no existing unassigned vendors at all in the database, create one
+    const campusList = await db.select().from(campuses).where(eq(campuses.isActive, 1)).limit(1);
+    const campusId = campusIdInput || campusList[0]?.id || 1;
+    const vendorName = userName ? `${userName}'s Kitchen` : "My Campus Kitchen";
+    const slug = `kitchen-${userId}-${Date.now().toString(36)}`;
+
+    await db.insert(vendors).values({
+      userId,
+      campusId,
+      name: vendorName,
+      slug,
+      category: "Food & Drinks",
+      description: "Fresh campus meals and bites prepared to order.",
+      etaMin: 20,
+      deliveryFeePesewas: 500,
+      isOpen: 1,
+    });
+
+    const newlyCreated = await db
+      .select()
+      .from(vendors)
+      .where(eq(vendors.userId, userId))
+      .limit(1);
+
+    return newlyCreated[0];
+  }
+
+  return null;
+}
+
 export const vendorRouter = router({
   /**
    * List all vendors — accessible by admin & moderator only.
@@ -101,40 +167,7 @@ export const vendorRouter = router({
       // Regular vendor — must have vendor role (or admin/moderator)
       requireVendorAccess(ctx.user.role);
 
-      // Look for existing vendor owned by this user
-      let userVendor = await db
-        .select()
-        .from(vendors)
-        .where(eq(vendors.userId, ctx.user.id))
-        .limit(1);
-
-      // If none found by userId, create one (only for vendor role, not admin viewing without vendorId)
-      if (!userVendor[0] && ctx.user.role === "vendor") {
-        const campusList = await db.select().from(campuses).where(eq(campuses.isActive, 1)).limit(1);
-        const campusId = ctx.user.campusId || campusList[0]?.id || 1;
-        const vendorName = ctx.user.name ? `${ctx.user.name}'s Kitchen` : "My Campus Kitchen";
-        const slug = `kitchen-${ctx.user.id}-${Date.now().toString(36)}`;
-
-        await db.insert(vendors).values({
-          userId: ctx.user.id,
-          campusId,
-          name: vendorName,
-          slug,
-          category: "Food & Drinks",
-          description: "Fresh campus meals and bites prepared to order.",
-          etaMin: 20,
-          deliveryFeePesewas: 500,
-          isOpen: 1,
-        });
-
-        userVendor = await db
-          .select()
-          .from(vendors)
-          .where(eq(vendors.userId, ctx.user.id))
-          .limit(1);
-      }
-
-      const shop = userVendor[0];
+      const shop = await resolveVendorForUser(db, ctx.user.id, ctx.user.role, ctx.user.name, ctx.user.campusId);
       if (!shop) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor profile not found. Contact an admin." });
 
       const vendorProducts = await db
@@ -167,8 +200,8 @@ export const vendorRouter = router({
       if (isAdminOrMod && input?.vendorId) {
         targetVendorId = input.vendorId;
       } else {
-        const found = await db.select({ id: vendors.id }).from(vendors).where(eq(vendors.userId, ctx.user.id)).limit(1);
-        targetVendorId = found[0]?.id;
+        const found = await resolveVendorForUser(db, ctx.user.id, ctx.user.role, ctx.user.name, ctx.user.campusId);
+        targetVendorId = found?.id;
       }
 
       if (!targetVendorId) return { totalRevenuePesewas: 0, totalOrders: 0, pendingOrders: 0, completedOrders: 0 };
@@ -242,8 +275,7 @@ export const vendorRouter = router({
         const rows = await db.select().from(vendors).where(eq(vendors.id, input.vendorId)).limit(1);
         found = rows[0];
       } else {
-        const rows = await db.select().from(vendors).where(eq(vendors.userId, ctx.user.id)).limit(1);
-        found = rows[0];
+        found = await resolveVendorForUser(db, ctx.user.id, ctx.user.role, ctx.user.name, ctx.user.campusId);
       }
 
       if (!found) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor profile not found." });
@@ -302,8 +334,8 @@ export const vendorRouter = router({
       if (isAdminOrMod && input.vendorId) {
         targetVendorId = input.vendorId;
       } else {
-        const found = await db.select({ id: vendors.id }).from(vendors).where(eq(vendors.userId, ctx.user.id)).limit(1);
-        targetVendorId = found[0]?.id;
+        const found = await resolveVendorForUser(db, ctx.user.id, ctx.user.role, ctx.user.name, ctx.user.campusId);
+        targetVendorId = found?.id;
       }
 
       if (!targetVendorId) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor profile not found." });
@@ -352,8 +384,8 @@ export const vendorRouter = router({
       if (isAdminOrMod && input.vendorId) {
         targetVendorId = input.vendorId;
       } else {
-        const found = await db.select({ id: vendors.id }).from(vendors).where(eq(vendors.userId, ctx.user.id)).limit(1);
-        targetVendorId = found[0]?.id;
+        const found = await resolveVendorForUser(db, ctx.user.id, ctx.user.role, ctx.user.name, ctx.user.campusId);
+        targetVendorId = found?.id;
       }
 
       if (!targetVendorId) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor profile not found." });
@@ -402,8 +434,8 @@ export const vendorRouter = router({
       if (isAdminOrMod && input.vendorId) {
         targetVendorId = input.vendorId;
       } else {
-        const found = await db.select({ id: vendors.id }).from(vendors).where(eq(vendors.userId, ctx.user.id)).limit(1);
-        targetVendorId = found[0]?.id;
+        const found = await resolveVendorForUser(db, ctx.user.id, ctx.user.role, ctx.user.name, ctx.user.campusId);
+        targetVendorId = found?.id;
       }
 
       if (!targetVendorId) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor profile not found." });
@@ -433,8 +465,8 @@ export const vendorRouter = router({
       if (isAdminOrMod && input.vendorId) {
         targetVendorId = input.vendorId;
       } else {
-        const found = await db.select({ id: vendors.id }).from(vendors).where(eq(vendors.userId, ctx.user.id)).limit(1);
-        targetVendorId = found[0]?.id;
+        const found = await resolveVendorForUser(db, ctx.user.id, ctx.user.role, ctx.user.name, ctx.user.campusId);
+        targetVendorId = found?.id;
       }
 
       if (!targetVendorId) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor profile not found." });
@@ -462,8 +494,7 @@ export const vendorRouter = router({
         const rows = await db.select().from(vendors).where(eq(vendors.id, input.vendorId)).limit(1);
         shop = rows[0];
       } else {
-        const rows = await db.select().from(vendors).where(eq(vendors.userId, ctx.user.id)).limit(1);
-        shop = rows[0];
+        shop = await resolveVendorForUser(db, ctx.user.id, ctx.user.role, ctx.user.name, ctx.user.campusId);
       }
 
       if (!shop) return { shop: null, orders: [] };
