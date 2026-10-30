@@ -171,38 +171,139 @@ export default function RiderDashboard() {
               <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={C.green} />
             }
             renderItem={({ item }) => {
-              const isUnaccepted = item.status === "placed";
+              const isUnaccepted = item.status === "placed" && !item.isMine;
+              const isMine = Boolean(item.isMine);
+              const isPrepared = Boolean(item.isFoodPrepared);
+              const isPreparing = item.status === "preparing";
+
               return (
-                <View style={[styles.card, isUnaccepted && styles.cardHighlight]}>
+                <View style={[
+                  styles.card,
+                  isUnaccepted && styles.cardHighlight,
+                  isMine && isPrepared && styles.cardPreparedHighlight,
+                ]}>
+                  {/* Top Bar with Restaurant and Status Badges */}
                   <View style={styles.cardHeader}>
-                    <Text style={styles.title} numberOfLines={1}>{item.restaurantName}</Text>
-                    <View style={[styles.statusTag, { backgroundColor: isUnaccepted ? '#FEF3C7' : '#DCFCE7' }]}>
-                      <Text style={[styles.statusTagText, { color: isUnaccepted ? '#B45309' : '#15803D' }]}>
-                        {isUnaccepted ? 'UNACCEPTED' : 'ACCEPTED'}
-                      </Text>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={styles.title} numberOfLines={1}>{item.restaurantName}</Text>
+                      {item.orderCode ? (
+                        <Text style={styles.orderCodeText}>#{item.orderCode}</Text>
+                      ) : null}
                     </View>
+
+                    {/* Status badge */}
+                    {isUnaccepted ? (
+                      <View style={[styles.statusTag, { backgroundColor: '#FEF3C7' }]}>
+                        <Text style={[styles.statusTagText, { color: '#B45309' }]}>
+                          UNACCEPTED
+                        </Text>
+                      </View>
+                    ) : isMine ? (
+                      <View style={[
+                        styles.statusTag,
+                        isPrepared
+                          ? { backgroundColor: '#DCFCE7' }
+                          : isPreparing
+                          ? { backgroundColor: '#FEF3C7' }
+                          : { backgroundColor: '#E0F2FE' }
+                      ]}>
+                        <Text style={[
+                          styles.statusTagText,
+                          isPrepared
+                            ? { color: '#15803D' }
+                            : isPreparing
+                            ? { color: '#B45309' }
+                            : { color: '#0369A1' }
+                        ]}>
+                          {isPrepared ? '🍳 FOOD PREPARED' : isPreparing ? '⏳ KITCHEN PREPARING' : 'MY ACCEPTED ORDER'}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.statusTag, { backgroundColor: '#F3F4F6' }]}>
+                        <Text style={[styles.statusTagText, { color: '#6B7280' }]}>
+                          {item.status?.toUpperCase() ?? 'ASSIGNED'}
+                        </Text>
+                      </View>
+                    )}
                   </View>
 
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  {/* Prepared Food Alert Banner if accepted by this rider */}
+                  {isMine && isPrepared && (
+                    <View style={styles.foodPreparedBanner}>
+                      <Ionicons name="checkmark-done-circle" size={20} color="#15803D" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.foodPreparedTitle}>Food is Prepared & Ready! 🎉</Text>
+                        <Text style={styles.foodPreparedSub}>
+                          The vendor has prepared this order. Head over to pick it up and deliver!
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Still preparing notice if accepted by rider */}
+                  {isMine && isPreparing && (
+                    <View style={styles.foodPreparingBanner}>
+                      <Ionicons name="time-outline" size={18} color="#B45309" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.foodPreparingTitle}>Kitchen is preparing food...</Text>
+                        <Text style={styles.foodPreparingSub}>
+                          You accepted this delivery. You will see an update here as soon as it's prepared!
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Order Items Preview (so rider sees the exact food) */}
+                  {item.items && item.items.length > 0 && (
+                    <View style={styles.itemsPreviewBox}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Ionicons name="fast-food-outline" size={15} color={C.green} />
+                        <Text style={styles.itemsPreviewTitle}>Items in this order:</Text>
+                      </View>
+                      {item.items.map((it: any) => (
+                        <Text key={it.id} style={styles.itemBullet} numberOfLines={1}>
+                          • {it.quantity}× {it.productName}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Drop-off address */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8, marginTop: 4 }}>
                     <Ionicons name="location-outline" size={16} color={C.muted} />
                     <Text style={styles.sub} numberOfLines={2}>Drop‑off: {item.dropoffAddress}</Text>
                   </View>
 
+                  {/* Card Footer with Payout and Actions */}
                   <View style={styles.cardFooter}>
-                    <Text style={styles.payout}>Payout: {formatCurrency(item.payout)}</Text>
-                    <TouchableOpacity
-                      style={[styles.acceptButton, isUnaccepted ? styles.acceptButtonPrimary : styles.acceptButtonSecondary]}
-                      onPress={() => handleAccept(item.id)}
-                      disabled={loadingId === item.id}
-                    >
-                      {loadingId === item.id ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                      ) : (
+                    <View>
+                      <Text style={styles.payoutLabel}>Earnings</Text>
+                      <Text style={styles.payout}>{formatCurrency(item.payout)}</Text>
+                    </View>
+
+                    {isUnaccepted ? (
+                      <TouchableOpacity
+                        style={[styles.acceptButton, styles.acceptButtonPrimary]}
+                        onPress={() => handleAccept(item.id)}
+                        disabled={loadingId === item.id}
+                      >
+                        {loadingId === item.id ? (
+                          <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                          <Text style={styles.buttonText}>Accept Delivery</Text>
+                        )}
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.acceptButton, isPrepared ? styles.acceptButtonPrepared : styles.acceptButtonSecondary]}
+                        onPress={() => router.push({ pathname: "/(commerce)/order/[id]", params: { id: String(item.id) } })}
+                      >
+                        <Ionicons name={isPrepared ? "navigate-outline" : "eye-outline"} size={16} color="#fff" style={{ marginRight: 4 }} />
                         <Text style={styles.buttonText}>
-                          {isUnaccepted ? "Accept Order" : "View Order"}
+                          {isPrepared ? "Open Delivery & Map" : "View Order Details"}
                         </Text>
-                      )}
-                    </TouchableOpacity>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               );
@@ -293,6 +394,83 @@ const styles = StyleSheet.create({
   },
   acceptButtonSecondary: {
     backgroundColor: '#3B82F6',
+  },
+  acceptButtonPrepared: {
+    backgroundColor: '#15803D',
+  },
+  cardPreparedHighlight: {
+    borderColor: '#86EFAC',
+    borderWidth: 2,
+    backgroundColor: '#FAFCFA',
+  },
+  orderCodeText: {
+    fontSize: 12,
+    color: C.muted,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  foodPreparedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#DCFCE7',
+    padding: 12,
+    borderRadius: 12,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  foodPreparedTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#15803D',
+  },
+  foodPreparedSub: {
+    fontSize: 12,
+    color: '#166534',
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  foodPreparingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 12,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  foodPreparingTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#B45309',
+  },
+  foodPreparingSub: {
+    fontSize: 12,
+    color: '#92400E',
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  itemsPreviewBox: {
+    backgroundColor: C.sage,
+    padding: 10,
+    borderRadius: 10,
+    marginVertical: 6,
+    gap: 3,
+  },
+  itemsPreviewTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: C.ink,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  itemBullet: {
+    fontSize: 13,
+    color: C.ink,
+    fontWeight: '600',
   },
   buttonText: {
     color: '#fff',

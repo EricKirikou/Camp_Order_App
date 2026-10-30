@@ -17,7 +17,9 @@ export const riderRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database unavailable." });
 
-    // Fetch unassigned orders waiting for a rider (status 'placed', or paid orders in placed/accepted)
+    // Fetch orders:
+    // 1) Unaccepted / unassigned orders waiting for a courier (status 'placed', courierId is null)
+    // 2) Active orders already accepted by THIS courier (accepted, preparing, on_the_way)
     const pending = await db
       .select()
       .from(orders)
@@ -25,28 +27,42 @@ export const riderRouter = router({
         and(
           isNull(orders.deletedAt),
           or(
-            eq(orders.status, "placed"),
-            and(inArray(orders.status, ["placed", "accepted"]), eq(orders.paymentStatus, "paid"))
+            // Available unassigned orders
+            and(
+              eq(orders.status, "placed"),
+              isNull(orders.courierId)
+            ),
+            // Orders accepted by this rider in progress
+            and(
+              eq(orders.courierId, ctx.user.id),
+              inArray(orders.status, ["accepted", "preparing", "on_the_way"])
+            )
           )
         )
       )
       .orderBy(desc(orders.createdAt))
       .limit(50);
 
-    // Resolve restaurant/vendor name for each order
+    // Resolve restaurant/vendor name and ordered items for each order
     const result = await Promise.all(
       pending.map(async (order) => {
-        const items = await db
+        const orderItemsWithProducts = await db
           .select({
+            id: orderItems.id,
+            productName: orderItems.productName,
+            quantity: orderItems.quantity,
             vendorName: vendors.name,
+            vendorEtaMin: vendors.etaMin,
           })
           .from(orderItems)
           .leftJoin(products, eq(orderItems.productId, products.id))
           .leftJoin(vendors, eq(products.vendorId, vendors.id))
-          .where(eq(orderItems.orderId, order.id))
-          .limit(1);
+          .where(eq(orderItems.orderId, order.id));
 
-        const restaurantName = items[0]?.vendorName || "Campus Kitchen";
+        const restaurantName = orderItemsWithProducts[0]?.vendorName || "Campus Kitchen";
+        const isMine = order.courierId === ctx.user.id;
+        // When vendor marks prepared, status transitions to "on_the_way" (or "prepared" if stored)
+        const isFoodPrepared = order.status === "on_the_way" || order.status === "completed";
 
         return {
           id: order.id,
@@ -55,7 +71,16 @@ export const riderRouter = router({
           dropoffAddress: order.deliveryAddress,
           payout: order.deliveryFeePesewas || 500,
           createdAt: order.createdAt.toISOString(),
+          updatedAt: order.updatedAt?.toISOString(),
           status: order.status,
+          courierId: order.courierId,
+          isMine,
+          isFoodPrepared,
+          items: orderItemsWithProducts.map((i) => ({
+            id: i.id,
+            productName: i.productName,
+            quantity: i.quantity,
+          })),
         };
       })
     );
@@ -83,11 +108,13 @@ export const riderRouter = router({
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This order was cancelled." });
       }
 
-      // Transition order status to 'accepted'
+      // Transition order status to 'accepted' and assign courier
       await db
         .update(orders)
         .set({
           status: "accepted",
+          courierId: ctx.user.id,
+          courierAcceptedAt: new Date(),
           updatedAt: new Date(),
         })
         .where(eq(orders.id, order.id));

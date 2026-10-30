@@ -8,6 +8,7 @@ import { formatGhs, friendlyError, ORDER_STATUS_LABEL } from "@/lib/camporder/fo
 import { trpc } from "@/lib/trpc";
 
 import { RiderLiveMap } from "@/components/camporder/RiderLiveMap";
+import { useCampOrderUser } from "@/hooks/use-camporder-user";
 import { useEffect } from "react";
 
 const STEPS = ["placed", "accepted", "preparing", "on_the_way", "completed"];
@@ -77,6 +78,7 @@ function PrepWaitCard({
 export default function OrderDetailsScreen() {
   const router = useRouter();
   const utils = trpc.useUtils();
+  const { user } = useCampOrderUser();
   const { id } = useLocalSearchParams<{ id: string }>();
   const order = trpc.orders.byId.useQuery(
     { id: Number(id) },
@@ -208,6 +210,60 @@ export default function OrderDetailsScreen() {
       />
     ) : null}
 
+    {/* Dedicated Banner for the Rider who accepted the order */}
+    {user && (user.id === data.courierId || user.role === "courier") && (data.status === "on_the_way" || data.status === "preparing") && (
+      <View style={{
+        backgroundColor: data.status === "on_the_way" ? "#DCFCE7" : "#FEF3C7",
+        borderRadius: 18,
+        padding: 16,
+        borderWidth: 1.5,
+        borderColor: data.status === "on_the_way" ? "#86EFAC" : "#FDE68A",
+        gap: 10,
+      }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: data.status === "on_the_way" ? "#BBF7D0" : "#FDE68A",
+            alignItems: "center",
+            justifyContent: "center",
+          }}>
+            <Ionicons
+              name={data.status === "on_the_way" ? "checkmark-done" : "timer-outline"}
+              size={20}
+              color={data.status === "on_the_way" ? "#15803D" : "#B45309"}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{
+              color: data.status === "on_the_way" ? "#15803D" : "#B45309",
+              fontSize: 12,
+              fontWeight: "900",
+              letterSpacing: 0.5,
+            }}>
+              {data.status === "on_the_way" ? "🍳 FOOD HAS BEEN PREPARED!" : "⏳ KITCHEN IS PREPARING"}
+            </Text>
+            <Text style={{ color: C.ink, fontSize: 15, fontWeight: "800" }}>
+              {data.status === "on_the_way"
+                ? "Ready for Rider Pickup & Delivery"
+                : "Awaiting Kitchen To Finish Preparation"}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={{
+          color: data.status === "on_the_way" ? "#166534" : "#92400E",
+          fontSize: 13,
+          lineHeight: 18,
+        }}>
+          {data.status === "on_the_way"
+            ? `The vendor finished cooking! Pick up the order from ${data.vendor?.name ?? "the kitchen"} and drop off at ${data.deliveryAddress}.`
+            : `The vendor is currently preparing the dishes (~${data.vendor?.etaMin ?? 20} min wait). Once completed, this screen will notify you immediately.`}
+        </Text>
+      </View>
+    )}
+
     {data.status === "on_the_way" ? (
       <RiderLiveMap
         vendorName={data.vendor?.name ?? "Campus Kitchen"}
@@ -283,6 +339,23 @@ export default function OrderDetailsScreen() {
 
     <Button title="Re-order items to cart" icon="cart-outline" variant="outline" onPress={() => void handleReorder()} loading={reorder.isPending} />
 
-    <Button title="Back to orders" variant="outline" onPress={() => router.replace("/(tabs)/orders")} />
+    {/* Courier Action: Complete Delivery */}
+    {user && (user.id === data.courierId || user.role === "courier") && data.status === "on_the_way" && (
+      <Button
+        title="Mark as Delivered to Student ✅"
+        variant="primary"
+        style={{ backgroundColor: "#15803D" }}
+        onPress={async () => {
+          try {
+            await utils.client.rider.updateStatus.mutate({ orderId: data.id, status: "completed" });
+            await utils.orders.byId.invalidate({ id: data.id });
+          } catch (e) {
+            setActionError(friendlyError(e, "Could not complete delivery"));
+          }
+        }}
+      />
+    )}
+
+    <Button title="Back to orders" variant="outline" onPress={() => router.replace(user?.role === "courier" ? "/(commerce)/rider/dashboard" : "/(tabs)/orders")} />
   </Page>;
 }
