@@ -15,6 +15,7 @@ import {
 import { Button, C, Header, Notice, Page } from "@/components/camporder/ui";
 import { useCampOrderUser } from "@/hooks/use-camporder-user";
 import { formatGhs, friendlyError, ORDER_STATUS_LABEL } from "@/lib/camporder/format";
+import * as Auth from "@/lib/_core/auth";
 import { trpc } from "@/lib/trpc";
 
 function KitchenOrderCard({
@@ -202,12 +203,28 @@ export default function VendorPortalScreen() {
 
   // Mutations
   const updateProfileMutation = trpc.vendor.updateProfile.useMutation();
+  const registerProfileMutation = trpc.vendor.registerProfile.useMutation();
   const createProductMutation = trpc.vendor.createProduct.useMutation();
   const toggleProductMutation = trpc.vendor.toggleProductAvailability.useMutation();
   const deleteProductMutation = trpc.vendor.deleteProduct.useMutation();
   const deleteVendorMutation = trpc.vendor.deleteVendor.useMutation();
   const markPreparingMutation = trpc.vendor.markPreparing.useMutation();
   const markPreparedMutation = trpc.vendor.markPrepared.useMutation();
+
+  // New Vendor Registration / Setup State
+  const [setupName, setSetupName] = useState(user?.name ? `${user.name}'s Kitchen` : "");
+  const [setupCategory, setSetupCategory] = useState("Food & Drinks");
+  const [setupEta, setSetupEta] = useState("20");
+  const [setupFee, setSetupFee] = useState("5.00");
+  const [setupDesc, setSetupDesc] = useState("");
+  const [setupError, setSetupError] = useState("");
+
+  const handleLogout = async () => {
+    await Auth.removeSessionToken();
+    await Auth.clearUserInfo();
+    await utils.auth.me.invalidate();
+    router.replace("/(auth)/login");
+  };
 
   // Settings State
   const [shopName, setShopName] = useState("");
@@ -243,6 +260,35 @@ export default function VendorPortalScreen() {
       utils.vendor.getRevenue.invalidate(),
       utils.vendor.listAll.invalidate(),
     ]);
+  };
+
+  const handleRegisterProfile = async () => {
+    setSetupError("");
+    if (!setupName.trim()) {
+      setSetupError("Please enter your kitchen or shop name.");
+      return;
+    }
+    const etaNum = parseInt(setupEta, 10);
+    if (isNaN(etaNum) || etaNum < 1 || etaNum > 180) {
+      setSetupError("Please enter a valid preparation wait time (1-180 minutes).");
+      return;
+    }
+    const feeNum = parseFloat(setupFee);
+    const feePesewas = isNaN(feeNum) ? 500 : Math.round(feeNum * 100);
+
+    try {
+      await registerProfileMutation.mutateAsync({
+        name: setupName.trim(),
+        category: setupCategory.trim() || "Food & Drinks",
+        description: setupDesc.trim() || undefined,
+        etaMin: etaNum,
+        deliveryFeePesewas: feePesewas,
+      });
+      setFeedback("Kitchen profile saved! You can now start uploading your menu items.");
+      await invalidateAll();
+    } catch (err) {
+      setSetupError(friendlyError(err, "Could not save kitchen profile."));
+    }
   };
 
   const handleSaveProfile = async () => {
@@ -383,6 +429,106 @@ export default function VendorPortalScreen() {
   }
 
   const shop = profileQuery.data?.shop ?? (isAdminOrMod ? selectedVendor : undefined);
+
+  // If vendor hasn't inserted their kitchen/vendor profile yet, show setup view so they save before uploading
+  if (!shop && !isAdminOrMod) {
+    return (
+      <Page>
+        <Header
+          title="Set Up Your Kitchen"
+          subtitle="Vendor Profile Setup"
+          right={
+            <Pressable
+              onPress={() => void handleLogout()}
+              style={styles.signOutBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
+            >
+              <Text style={styles.signOutBtnText}>Sign out</Text>
+            </Pressable>
+          }
+        />
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <View style={{ gap: 16, marginTop: 8 }}>
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontSize: 24, fontWeight: "900", color: C.ink, letterSpacing: -0.6 }}>
+                Welcome, {user.name ?? "Vendor"}! 🍽️
+              </Text>
+              <Text style={{ fontSize: 14, color: C.muted, lineHeight: 21 }}>
+                Please insert and save your kitchen or store details below before you can start uploading products and receiving orders.
+              </Text>
+            </View>
+
+            {setupError ? <Notice tone="error">{setupError}</Notice> : null}
+
+            <View style={styles.settingsCard}>
+              <Text style={styles.inputLabel}>Kitchen / Store Name *</Text>
+              <TextInput
+                style={styles.textInput}
+                value={setupName}
+                onChangeText={setSetupName}
+                placeholder="e.g. Asanka Kitchen or Auntie Muni's"
+                placeholderTextColor={C.muted}
+              />
+
+              <Text style={styles.inputLabel}>Category</Text>
+              <TextInput
+                style={styles.textInput}
+                value={setupCategory}
+                onChangeText={setSetupCategory}
+                placeholder="e.g. Food & Drinks, Fast Food, Local Dishes"
+                placeholderTextColor={C.muted}
+              />
+
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Prep Wait Time (mins)</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={setupEta}
+                    onChangeText={setSetupEta}
+                    keyboardType="numeric"
+                    placeholder="20"
+                    placeholderTextColor={C.muted}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Delivery Fee (GH₵)</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={setupFee}
+                    onChangeText={setSetupFee}
+                    keyboardType="decimal-pad"
+                    placeholder="5.00"
+                    placeholderTextColor={C.muted}
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.inputLabel}>Description (Optional)</Text>
+              <TextInput
+                style={[styles.textInput, { height: 75, textAlignVertical: "top" }]}
+                value={setupDesc}
+                onChangeText={setSetupDesc}
+                placeholder="Tell students about your meals, ingredients, and specialties…"
+                placeholderTextColor={C.muted}
+                multiline
+              />
+            </View>
+
+            <Button
+              title="Save Kitchen & Start Uploading 🚀"
+              icon="checkmark-circle-outline"
+              loading={registerProfileMutation.isPending}
+              disabled={!setupName.trim() || registerProfileMutation.isPending}
+              onPress={() => void handleRegisterProfile()}
+            />
+          </View>
+        </ScrollView>
+      </Page>
+    );
+  }
+
   const products = profileQuery.data?.products ?? [];
   const kitchenOrders = ordersQuery.data?.orders ?? [];
   const activeOrdersCount = kitchenOrders.filter(
@@ -395,7 +541,17 @@ export default function VendorPortalScreen() {
       <Header
         title={isAdminOrMod ? "Vendor Manager" : "Vendor Kitchen"}
         subtitle={shop?.name ?? (isAdminOrMod ? "Select a vendor" : "Kitchen Portal")}
-        back
+        back={isAdminOrMod}
+        right={
+          <Pressable
+            onPress={() => void handleLogout()}
+            style={styles.signOutBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+          >
+            <Text style={styles.signOutBtnText}>Sign out</Text>
+          </Pressable>
+        }
       />
 
       {/* Admin/Moderator Vendor Picker */}
@@ -1135,4 +1291,17 @@ const styles = StyleSheet.create({
   },
   vendorPickerItemName: { fontSize: 14, fontWeight: "800", color: C.ink },
   vendorPickerItemMeta: { fontSize: 12, color: C.muted, marginTop: 2 },
+  signOutBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  signOutBtnText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#DC2626",
+  },
 });

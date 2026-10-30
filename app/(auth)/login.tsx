@@ -27,6 +27,14 @@ export default function LoginScreen() {
         if (result.sessionToken) await Auth.setSessionToken(result.sessionToken);
         if (result.user) await Auth.setUserInfo(result.user);
         await utils.auth.me.invalidate();
+        if (result.user?.role === "vendor") {
+          router.replace("/(commerce)/vendor/portal");
+          return;
+        }
+        if (result.user?.role === "courier") {
+          router.replace("/(commerce)/rider/dashboard");
+          return;
+        }
         router.replace("/(tabs)");
         return;
       }

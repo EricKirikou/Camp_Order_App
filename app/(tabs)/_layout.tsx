@@ -1,4 +1,4 @@
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Platform } from "react-native";
@@ -10,6 +10,14 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const bottomPadding = Platform.OS === "web" ? 9 : Math.max(insets.bottom, 8);
   const { user } = useCampOrderUser();
+
+  if (user?.role === "vendor") {
+    return <Redirect href="/(commerce)/vendor/portal" />;
+  }
+  if (user?.role === "courier") {
+    return <Redirect href="/(commerce)/rider/dashboard" />;
+  }
+
   const cart = trpc.cart.get.useQuery(undefined, {
     enabled: Boolean(user),
     retry: false,
