@@ -14,10 +14,6 @@ export default function EntryRoute() {
       Auth.getUserInfo(),
     ]).then(([onboarded, user]) => {
       if (!active) return;
-      if (user?.role === "vendor") {
-        setDestination("/(commerce)/vendor/portal");
-        return;
-      }
       if (user?.role === "courier") {
         setDestination("/(commerce)/rider/dashboard");
         return;

@@ -541,7 +541,7 @@ export default function VendorPortalScreen() {
       <Header
         title={isAdminOrMod ? "Vendor Manager" : "Vendor Kitchen"}
         subtitle={shop?.name ?? (isAdminOrMod ? "Select a vendor" : "Kitchen Portal")}
-        back={isAdminOrMod}
+        back={true}
         right={
           <Pressable
             onPress={() => void handleLogout()}

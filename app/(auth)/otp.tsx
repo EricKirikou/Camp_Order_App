@@ -38,10 +38,6 @@ export default function OtpScreen() {
       if (result.user) await Auth.setUserInfo(result.user);
       await removeOtpResendToken(challengeId);
       await utils.auth.me.invalidate();
-      if (result.user?.role === "vendor") {
-        router.replace("/(commerce)/vendor/portal");
-        return;
-      }
       if (result.user?.role === "courier") {
         router.replace("/(commerce)/rider/dashboard");
         return;

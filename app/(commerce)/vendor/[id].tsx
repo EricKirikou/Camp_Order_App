@@ -12,8 +12,8 @@ export default function VendorScreen() {
   const { user } = useCampOrderUser();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  // If the logged in user is a vendor or accessing their portal, show the Vendor Management Portal
-  if (user?.role === "vendor" || id === "portal" || id === "me") {
+  // Show the Vendor Management Portal when explicitly navigating to the portal route
+  if (id === "portal" || id === "me") {
     return <VendorPortalScreen />;
   }
 

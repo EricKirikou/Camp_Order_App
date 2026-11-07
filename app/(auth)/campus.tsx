@@ -29,10 +29,6 @@ export default function CampusScreen() {
     setSaving(true); setError("");
     try {
       await selected.selectCampus(campus, Boolean(user));
-      if (user?.role === "vendor") {
-        router.replace("/(commerce)/vendor/portal");
-        return;
-      }
       if (user?.role === "courier") {
         router.replace("/(commerce)/rider/dashboard");
         return;
