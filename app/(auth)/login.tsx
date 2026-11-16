@@ -7,6 +7,7 @@ import { friendlyError } from "@/lib/camporder/format";
 import { trpc } from "@/lib/trpc";
 import { saveOtpResendToken } from "@/lib/camporder/otp-token";
 import * as Auth from "@/lib/_core/auth";
+import { getRoleDashboardRoute } from "@/lib/camporder/roles";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -27,8 +28,8 @@ export default function LoginScreen() {
         if (result.sessionToken) await Auth.setSessionToken(result.sessionToken);
         if (result.user) await Auth.setUserInfo(result.user);
         await utils.auth.me.invalidate();
-        if (result.user?.role === "courier") {
-          router.replace("/(commerce)/rider/dashboard");
+        if (result.user?.role) {
+          router.replace(getRoleDashboardRoute(result.user.role) as any);
           return;
         }
         router.replace("/(tabs)");

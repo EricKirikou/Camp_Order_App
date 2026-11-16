@@ -6,6 +6,7 @@ import { Button, C, Field, Header, Notice, Page } from "@/components/camporder/u
 import { friendlyError } from "@/lib/camporder/format";
 import * as Auth from "@/lib/_core/auth";
 import { getOtpResendToken, removeOtpResendToken, saveOtpResendToken } from "@/lib/camporder/otp-token";
+import { getRoleDashboardRoute } from "@/lib/camporder/roles";
 import { trpc } from "@/lib/trpc";
 
 export default function OtpScreen() {
@@ -38,8 +39,8 @@ export default function OtpScreen() {
       if (result.user) await Auth.setUserInfo(result.user);
       await removeOtpResendToken(challengeId);
       await utils.auth.me.invalidate();
-      if (result.user?.role === "courier") {
-        router.replace("/(commerce)/rider/dashboard");
+      if (result.user?.role && result.user.role !== "user") {
+        router.replace(getRoleDashboardRoute(result.user.role) as any);
         return;
       }
       router.replace("/(auth)/campus");

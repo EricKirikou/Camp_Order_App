@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { C } from "@/components/camporder/ui";
 import * as Auth from "@/lib/_core/auth";
+import { getRoleDashboardRoute } from "@/lib/camporder/roles";
 
 export default function EntryRoute() {
   const [destination, setDestination] = useState<string | null>(null);
@@ -14,8 +15,8 @@ export default function EntryRoute() {
       Auth.getUserInfo(),
     ]).then(([onboarded, user]) => {
       if (!active) return;
-      if (user?.role === "courier") {
-        setDestination("/(commerce)/rider/dashboard");
+      if (user?.role && user.role !== "user") {
+        setDestination(getRoleDashboardRoute(user.role));
         return;
       }
       setDestination(onboarded === "1" ? "/(tabs)" : "/onboarding");

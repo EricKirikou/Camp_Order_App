@@ -6,6 +6,7 @@ import { Button, C, Header, Notice, Page } from "@/components/camporder/ui";
 import { useCampOrderUser } from "@/hooks/use-camporder-user";
 import { useSelectedCampus } from "@/hooks/use-selected-campus";
 import { friendlyError } from "@/lib/camporder/format";
+import { getRoleDashboardRoute } from "@/lib/camporder/roles";
 import { trpc } from "@/lib/trpc";
 
 export default function CampusScreen() {
@@ -29,8 +30,8 @@ export default function CampusScreen() {
     setSaving(true); setError("");
     try {
       await selected.selectCampus(campus, Boolean(user));
-      if (user?.role === "courier") {
-        router.replace("/(commerce)/rider/dashboard");
+      if (user?.role && user.role !== "user") {
+        router.replace(getRoleDashboardRoute(user.role) as any);
         return;
       }
       router.replace("/(tabs)");

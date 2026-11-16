@@ -91,9 +91,9 @@ export default function ProfileScreen() {
           </Pressable>
           <Button title="My orders" variant="outline" icon="receipt-outline" onPress={() => router.push("/(tabs)/orders")} />
           {user.role === "vendor" || user.role === "admin" || user.role === "moderator" ? (
-            <Button title="Vendor kitchen portal" variant="outline" icon="restaurant-outline" onPress={() => router.push("/(commerce)/vendor/portal")} />
+            <Button title="Vendor kitchen portal" variant="outline" icon="restaurant-outline" onPress={() => router.push({ pathname: "/(commerce)/vendor/[id]", params: { id: "portal" } })} />
           ) : (
-            <Button title="Open vendor kitchen" variant="quiet" icon="restaurant-outline" onPress={() => router.push("/(commerce)/vendor/portal")} />
+            <Button title="Open vendor kitchen" variant="quiet" icon="restaurant-outline" onPress={() => router.push({ pathname: "/(commerce)/vendor/[id]", params: { id: "portal" } })} />
           )}
           {user.role === "courier" || user.role === "admin" || user.role === "moderator" ? (
             <Button title="Rider deliveries" variant="outline" icon="bicycle-outline" onPress={() => router.push("/(commerce)/rider/dashboard")} />

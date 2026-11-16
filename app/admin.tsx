@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +20,7 @@ import { Button, C, Field, Notice } from "@/components/camporder/ui";
 import { getApiBaseUrl } from "@/constants/oauth";
 import * as Auth from "@/lib/_core/auth";
 import { assetSource } from "@/lib/camporder/assets";
+import { useCampOrderUser } from "@/hooks/use-camporder-user";
 import { formatGhs, friendlyError } from "@/lib/camporder/format";
 import { trpc } from "@/lib/trpc";
 
@@ -84,8 +85,32 @@ function getGreeting() {
 export default function AdminScreen() {
   const router = useRouter();
   const utils = trpc.useUtils();
+  const { user, loading: userLoading } = useCampOrderUser();
+
+  const isAdmin = user?.role === "admin";
+  const isModerator = user?.role === "moderator";
+  const isStaff = isAdmin || isModerator;
+
+  useEffect(() => {
+    if (userLoading) return;
+    if (!user) {
+      router.replace("/(auth)/login");
+    } else if (user.role === "vendor") {
+      router.replace({ pathname: "/(commerce)/vendor/[id]", params: { id: "portal" } } as any);
+    } else if (user.role === "courier") {
+      router.replace("/(commerce)/rider/dashboard");
+    } else if (!isStaff) {
+      router.replace("/(tabs)");
+    }
+  }, [user, userLoading, isStaff, router]);
 
   const [section, setSection] = useState<Section>("dashboard");
+
+  useEffect(() => {
+    if (isModerator && (section === "moderators" || section === "audit" || section === "settings")) {
+      setSection("dashboard");
+    }
+  }, [isModerator, section]);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -127,10 +152,10 @@ export default function AdminScreen() {
   const vendors = trpc.admin.vendors.useQuery(undefined, { retry: false });
   const products = trpc.admin.products.useQuery(undefined, { retry: false });
   const services = trpc.admin.services.useQuery(undefined, { retry: false });
-  const moderators = trpc.admin.moderators.useQuery(undefined, { retry: false });
-  const paystackConfig = trpc.admin.getPaystackConfig.useQuery(undefined, { retry: false });
+  const moderators = trpc.admin.moderators.useQuery(undefined, { retry: false, enabled: isAdmin });
+  const paystackConfig = trpc.admin.getPaystackConfig.useQuery(undefined, { retry: false, enabled: isAdmin });
   const promotionsList = trpc.admin.promotions.useQuery(undefined, { retry: false });
-  const auditTrail = trpc.admin.auditTrail.useQuery(undefined, { retry: false, refetchInterval: 15_000 });
+  const auditTrail = trpc.admin.auditTrail.useQuery(undefined, { retry: false, refetchInterval: 15_000, enabled: isAdmin });
 
   // ─── Mutations ───────────────────────────────────────────────────────────────
   const logout = trpc.auth.logout.useMutation();
@@ -182,12 +207,12 @@ export default function AdminScreen() {
   const handleConfirmLogout = async () => {
     setSigningOut(true);
     try {
-      await logout.mutateAsync().catch(() => {});
+      await logout.mutateAsync().catch(() => { });
       if (Platform.OS === "web") {
         try {
           const baseUrl = getApiBaseUrl();
           await fetch(`${baseUrl}/api/auth/logout`, { method: "POST", credentials: "include" });
-        } catch {}
+        } catch { }
       }
       await Auth.removeSessionToken();
       await Auth.clearUserInfo();
@@ -357,10 +382,16 @@ export default function AdminScreen() {
   }, [analytics.data?.recentOrders, orderFilter]);
 
   // ─── Sidebar Nav ─────────────────────────────────────────────────────────────
-  const navGroups = [
-    { label: null, items: NAV_ITEMS.filter((n) => !n.group) },
-    { label: "Admin Tools", items: NAV_ITEMS.filter((n) => n.group === "Admin") },
-  ];
+  const navGroups = useMemo(() => {
+    const mainItems = NAV_ITEMS.filter((n) => !n.group);
+    if (!isAdmin) {
+      return [{ label: null, items: mainItems }];
+    }
+    return [
+      { label: null, items: mainItems },
+      { label: "Admin Tools", items: NAV_ITEMS.filter((n) => n.group === "Admin") },
+    ];
+  }, [isAdmin]);
 
   const sidebarContent = (
     <View style={s.sidebar}>
@@ -371,12 +402,12 @@ export default function AdminScreen() {
         </View>
         <View>
           <Text style={s.logoTitle}>CampOrder</Text>
-          <View style={s.adminBadge}>
-            <Text style={s.adminBadgeText}>Admin Panel</Text>
+          <View style={[s.adminBadge, isModerator && { backgroundColor: "#2563EB" }]}>
+            <Text style={s.adminBadgeText}>{isModerator ? "Moderator Panel" : "Admin Panel"}</Text>
           </View>
         </View>
       </View>
-      <Text style={s.logoSub}>Operations & Live Marketplace</Text>
+      <Text style={s.logoSub}>{isModerator ? "Vendor Oversight & Operations" : "Operations & Live Marketplace"}</Text>
 
       <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.12)", marginVertical: 16 }} />
 
@@ -441,12 +472,12 @@ export default function AdminScreen() {
             </View>
           ) : null}
         </Pressable>
-        <Pressable onPress={() => setShowSignoutModal(true)} style={s.adminAvatar}>
-          <Text style={s.adminAvatarText}>AD</Text>
+        <Pressable onPress={() => setShowSignoutModal(true)} style={[s.adminAvatar, isModerator && { backgroundColor: "#2563EB" }]}>
+          <Text style={s.adminAvatarText}>{isModerator ? "MD" : "AD"}</Text>
         </Pressable>
         <Pressable onPress={() => setShowSignoutModal(true)} style={{ marginLeft: -6 }}>
-          <Text style={s.adminNameText}>Admin</Text>
-          <Text style={s.adminRoleText}>Administrator</Text>
+          <Text style={s.adminNameText}>{user?.name || (isModerator ? "Moderator" : "Admin")}</Text>
+          <Text style={s.adminRoleText}>{isModerator ? "Moderator (Vendor Oversight)" : "Administrator"}</Text>
         </Pressable>
         <Ionicons name="chevron-down" size={14} color="#9CA3AF" />
       </View>
@@ -749,7 +780,9 @@ export default function AdminScreen() {
               <Text style={s.pageTitle}>Vendors & Stores</Text>
               <Text style={s.pageSubtitle}>Manage kitchens, stores and delivery ETAs</Text>
             </View>
-            <Button title="Add Vendor" icon="add" onPress={() => setEditing({ slug: "", campusId: campuses.data?.[0]?.id ? String(campuses.data[0].id) : "1", name: "", category: "food", description: "", etaMin: "25", deliveryFeePesewas: "500", isOpen: "1" })} />
+            {isAdmin ? (
+              <Button title="Add Vendor" icon="add" onPress={() => setEditing({ slug: "", campusId: campuses.data?.[0]?.id ? String(campuses.data[0].id) : "1", name: "", category: "food", description: "", etaMin: "25", deliveryFeePesewas: "500", isOpen: "1" })} />
+            ) : null}
           </View>
           <View style={{ gap: 12 }}>
             {vendors.data?.map((vendor) => {
@@ -771,8 +804,19 @@ export default function AdminScreen() {
                     </View>
                   </View>
                   <View style={s.rowActions}>
-                    <Pressable onPress={() => setEditing(toDraft(vendor as any))} style={s.editBtn}><Ionicons name="create-outline" size={14} color={C.green} /><Text style={s.editBtnText}>Edit</Text></Pressable>
-                    <Pressable onPress={() => confirmDelete(vendor as any, "vendors")} style={s.deleteBtn}><Ionicons name="trash-outline" size={14} color={C.coral} /><Text style={s.deleteBtnText}>Delete</Text></Pressable>
+                    <Pressable
+                      onPress={() => router.push({ pathname: "/(commerce)/vendor/[id]", params: { id: "portal", vendorId: String(vendor.id) } })}
+                      style={[s.editBtn, { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE" }]}
+                    >
+                      <Ionicons name="storefront-outline" size={14} color="#1D4ED8" />
+                      <Text style={[s.editBtnText, { color: "#1D4ED8" }]}>Inspect Dashboard</Text>
+                    </Pressable>
+                    {isAdmin ? (
+                      <>
+                        <Pressable onPress={() => setEditing(toDraft(vendor as any))} style={s.editBtn}><Ionicons name="create-outline" size={14} color={C.green} /><Text style={s.editBtnText}>Edit</Text></Pressable>
+                        <Pressable onPress={() => confirmDelete(vendor as any, "vendors")} style={s.deleteBtn}><Ionicons name="trash-outline" size={14} color={C.coral} /><Text style={s.deleteBtnText}>Delete</Text></Pressable>
+                      </>
+                    ) : null}
                   </View>
                 </View>
               );
@@ -1297,6 +1341,35 @@ export default function AdminScreen() {
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────────
+  if (userLoading) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F9FAFB" }}>
+        <ActivityIndicator size="large" color={C.green} />
+      </View>
+    );
+  }
+
+  if (!isStaff) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F9FAFB", padding: 24, gap: 12 }}>
+        <Ionicons name="shield-outline" size={48} color={C.coral} />
+        <Text style={{ fontSize: 18, fontWeight: "800", color: "#111827" }}>Access Restricted</Text>
+        <Text style={{ fontSize: 14, color: "#6B7280", textAlign: "center", maxWidth: 320 }}>
+          {user?.role === "vendor"
+            ? "Vendors have exclusive access to their own vendor kitchen portal."
+            : "This administrative area is restricted to administrators and moderators."}
+        </Text>
+        <Button
+          title={user?.role === "vendor" ? "Open Vendor Dashboard" : "Return to Home"}
+          onPress={() => {
+            if (user?.role === "vendor") router.replace({ pathname: "/(commerce)/vendor/[id]", params: { id: "portal" } } as any);
+            else router.replace("/(tabs)");
+          }}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={s.root}>
       {/* Sidebar */}

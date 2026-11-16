@@ -11,6 +11,9 @@ export default function TabLayout() {
   const bottomPadding = Platform.OS === "web" ? 9 : Math.max(insets.bottom, 8);
   const { user } = useCampOrderUser();
 
+  if (user?.role === "vendor") {
+    return <Redirect href={{ pathname: "/(commerce)/vendor/[id]", params: { id: "portal" } } as any} />;
+  }
   if (user?.role === "courier") {
     return <Redirect href="/(commerce)/rider/dashboard" />;
   }

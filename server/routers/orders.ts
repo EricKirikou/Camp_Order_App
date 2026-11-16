@@ -15,7 +15,9 @@ export const ordersRouter = router({
   byId: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Orders are unavailable." });
-    const isStaffOrCourier = ctx.user.role === "courier" || ctx.user.role === "admin" || ctx.user.role === "moderator" || ctx.user.role === "vendor";
+    const isStaffOrCourier = ctx.user.role === "courier" || ctx.user.role === "admin" || ctx.user.role === "moderator";
+    const isVendor = ctx.user.role === "vendor";
+
     const found = await db
       .select()
       .from(orders)
@@ -23,12 +25,29 @@ export const ordersRouter = router({
         and(
           eq(orders.id, input.id),
           isNull(orders.deletedAt),
-          isStaffOrCourier ? undefined : eq(orders.userId, ctx.user.id)
+          isStaffOrCourier || isVendor ? undefined : eq(orders.userId, ctx.user.id)
         )
       )
       .limit(1);
     if (!found[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
     const items = await db.select().from(orderItems).where(eq(orderItems.orderId, input.id));
+
+    let visibleItems = items;
+    // For vendors, verify that the order belongs to them as a customer or contains items from their store
+    if (isVendor && found[0].userId !== ctx.user.id) {
+      const vendorRows = await db.select().from(vendors).where(eq(vendors.userId, ctx.user.id)).limit(1);
+      const vendorShop = vendorRows[0];
+      if (!vendorShop) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Vendors can only view orders containing items from their own store." });
+      }
+      const vendorProds = await db.select({ id: products.id }).from(products).where(eq(products.vendorId, vendorShop.id));
+      const vendorProdIds = new Set(vendorProds.map((p) => p.id));
+      const matchedItems = items.filter((it) => vendorProdIds.has(it.productId));
+      if (matchedItems.length === 0) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Vendors can only view orders containing items from their own store." });
+      }
+      visibleItems = matchedItems;
+    }
 
     let vendorInfo = null;
     if (items.length > 0) {
@@ -69,7 +88,7 @@ export const ordersRouter = router({
       ? digitsOnly.slice(-6)
       : String(found[0].id * 831417).padStart(6, "0").slice(-6);
 
-    return { ...found[0], items, vendor: vendorInfo, courier: courierInfo, deliveryConfirmationCode };
+    return { ...found[0], items: visibleItems, vendor: vendorInfo, courier: courierInfo, deliveryConfirmationCode };
   }),
 
   reorder: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {

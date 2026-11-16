@@ -27,13 +27,40 @@ export default function VendorScreen() {
   if (user && shop.userId && user.id === shop.userId) {
     return <VendorPortalScreen />;
   }
+
+  // If another vendor tries to view this vendor's store via URL
+  if (user?.role === "vendor") {
+    return (
+      <Page>
+        <Notice tone="error">
+          Vendor accounts cannot access other vendors' stores. You are only permitted to access your own vendor dashboard.
+        </Notice>
+        <Button
+          title="Go to My Vendor Dashboard"
+          onPress={() => router.replace({ pathname: "/(commerce)/vendor/[id]", params: { id: "portal" } } as any)}
+        />
+      </Page>
+    );
+  }
+
+  const isAdminOrMod = user?.role === "admin" || user?.role === "moderator";
+
   return <Page>
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 11 }}>
         <Pressable onPress={() => router.back()} style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.white, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.border }}><Ionicons name="arrow-back" size={20} color={C.ink} /></Pressable>
         <Text style={{ color: C.ink, fontWeight: "800", fontSize: 18 }}>Campus seller</Text>
       </View>
-      <CartIconButton count={cart.data?.itemCount ?? 0} />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        {isAdminOrMod ? (
+          <Button
+            title="Inspect Dashboard"
+            variant="outline"
+            onPress={() => router.push({ pathname: "/(commerce)/vendor/[id]", params: { id: "portal", vendorId: String(shop.id) } })}
+          />
+        ) : null}
+        <CartIconButton count={cart.data?.itemCount ?? 0} />
+      </View>
     </View>
     <View style={{ padding: 19, backgroundColor: C.green, borderRadius: 22, gap: 12 }}><View style={{ width: 53, height: 53, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" }}><Ionicons name="storefront" size={25} color={C.white} /></View><Text style={{ color: C.white, fontSize: 24, fontWeight: "900", letterSpacing: -0.5 }}>{shop.name}</Text><Text style={{ color: "#DAEDE1", fontSize: 13, lineHeight: 19 }}>{shop.description}</Text><View style={{ flexDirection: "row", gap: 15 }}><Text style={{ color: C.white, fontSize: 12, fontWeight: "800" }}>★ {(shop.ratingHundredths / 100).toFixed(1)}</Text><Text style={{ color: C.white, fontSize: 12, fontWeight: "800" }}>~{shop.etaMin} min</Text><Text style={{ color: C.white, fontSize: 12, fontWeight: "800" }}>{shop.isOpen ? "Open now" : "Closed"}</Text></View></View>
     <Text style={{ color: C.ink, fontSize: 19, fontWeight: "900" }}>Menu & Items</Text>

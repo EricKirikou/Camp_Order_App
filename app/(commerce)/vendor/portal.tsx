@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { Button, C, Header, Notice, Page } from "@/components/camporder/ui";
+import { getApiBaseUrl } from "@/constants/oauth";
 import { useCampOrderUser } from "@/hooks/use-camporder-user";
 import { formatGhs, friendlyError, ORDER_STATUS_LABEL } from "@/lib/camporder/format";
 import * as Auth from "@/lib/_core/auth";
@@ -71,8 +73,8 @@ function KitchenOrderCard({
                 order.status === "preparing"
                   ? { backgroundColor: "#FEF3C7" }
                   : order.status === "on_the_way"
-                  ? { backgroundColor: "#DCFCE7" }
-                  : { backgroundColor: C.sage },
+                    ? { backgroundColor: "#DCFCE7" }
+                    : { backgroundColor: C.sage },
               ]}
             >
               <Text
@@ -81,8 +83,8 @@ function KitchenOrderCard({
                   order.status === "preparing"
                     ? { color: "#B45309" }
                     : order.status === "on_the_way"
-                    ? { color: "#15803D" }
-                    : { color: C.green },
+                      ? { color: "#15803D" }
+                      : { color: C.green },
                 ]}
               >
                 {ORDER_STATUS_LABEL[order.status] ?? order.status}
@@ -158,11 +160,24 @@ function KitchenOrderCard({
 
 export default function VendorPortalScreen() {
   const router = useRouter();
-  const { user } = useCampOrderUser();
+  const params = useLocalSearchParams<{ vendorId?: string }>();
+  const { user, loading: userLoading } = useCampOrderUser();
   const utils = trpc.useUtils();
+  const logoutMutation = trpc.auth.logout.useMutation();
 
   const isAdminOrMod = user?.role === "admin" || user?.role === "moderator";
   const isVendorRole = user?.role === "vendor";
+
+  useEffect(() => {
+    if (userLoading) return;
+    if (!user) {
+      router.replace("/(auth)/login");
+    } else if (user.role === "courier") {
+      router.replace("/(commerce)/rider/dashboard");
+    } else if (!isAdminOrMod && !isVendorRole) {
+      router.replace("/(tabs)");
+    }
+  }, [user, userLoading, isAdminOrMod, isVendorRole, router]);
 
   type Tab = "orders" | "products" | "revenue" | "settings";
   const [activeTab, setActiveTab] = useState<Tab>("orders");
@@ -170,8 +185,23 @@ export default function VendorPortalScreen() {
   const [errorMsg, setErrorMsg] = useState("");
 
   // Admin/moderator vendor picker
-  const [selectedVendorId, setSelectedVendorId] = useState<number | undefined>(undefined);
+  const [selectedVendorId, setSelectedVendorId] = useState<number | undefined>(() => {
+    if (params.vendorId) {
+      const parsed = Number(params.vendorId);
+      return !isNaN(parsed) && parsed > 0 ? parsed : undefined;
+    }
+    return undefined;
+  });
   const [showVendorPicker, setShowVendorPicker] = useState(false);
+
+  useEffect(() => {
+    if (isAdminOrMod && params.vendorId) {
+      const parsed = Number(params.vendorId);
+      if (!isNaN(parsed) && parsed > 0) {
+        setSelectedVendorId(parsed);
+      }
+    }
+  }, [isAdminOrMod, params.vendorId]);
 
   // All vendors list (admin/moderator only)
   const allVendorsQuery = trpc.vendor.listAll.useQuery(undefined, {
@@ -220,10 +250,25 @@ export default function VendorPortalScreen() {
   const [setupError, setSetupError] = useState("");
 
   const handleLogout = async () => {
+    try {
+      await logoutMutation.mutateAsync().catch(() => { });
+      if (Platform.OS === "web") {
+        try {
+          const baseUrl = getApiBaseUrl();
+          await fetch(`${baseUrl}/api/auth/logout`, { method: "POST", credentials: "include" });
+        } catch { }
+      }
+    } catch { }
     await Auth.removeSessionToken();
     await Auth.clearUserInfo();
-    await utils.auth.me.invalidate();
-    router.replace("/(auth)/login");
+    utils.auth.me.setData(undefined, null as never);
+    utils.auth.me.reset();
+    await utils.invalidate();
+    if (Platform.OS === "web") {
+      window.location.href = "/login";
+    } else {
+      router.replace("/(auth)/login");
+    }
   };
 
   // Settings State
@@ -418,10 +463,10 @@ export default function VendorPortalScreen() {
     );
   }
 
-  if (profileQuery.isLoading || (isAdminOrMod && allVendorsQuery.isLoading)) {
+  if (userLoading || profileQuery.isLoading || (isAdminOrMod && allVendorsQuery.isLoading)) {
     return (
       <Page>
-        <Header title="Vendor Kitchen" back />
+        <Header title="Vendor Kitchen" back={isAdminOrMod} />
         <ActivityIndicator color={C.green} style={{ marginTop: 40 }} />
         <Text style={{ color: C.muted, textAlign: "center", marginTop: 10 }}>Loading kitchen portal…</Text>
       </Page>
@@ -541,7 +586,7 @@ export default function VendorPortalScreen() {
       <Header
         title={isAdminOrMod ? "Vendor Manager" : "Vendor Kitchen"}
         subtitle={shop?.name ?? (isAdminOrMod ? "Select a vendor" : "Kitchen Portal")}
-        back={true}
+        back={isAdminOrMod}
         right={
           <Pressable
             onPress={() => void handleLogout()}
@@ -567,7 +612,7 @@ export default function VendorPortalScreen() {
               <Ionicons name="chevron-down" size={16} color={C.muted} />
             </Pressable>
           </View>
-          {isAdminOrMod && effectiveVendorId && (
+          {user?.role === "admin" && effectiveVendorId && (
             <Pressable onPress={handleDeleteVendor} style={styles.deleteVendorBtn}>
               <Ionicons name="trash-outline" size={18} color="#DC2626" />
             </Pressable>

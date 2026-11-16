@@ -113,6 +113,9 @@ export const vendorRouter = router({
       requireVendorAccess(ctx.user.role);
 
       const shop = await resolveVendorForUser(db, ctx.user.id);
+      if (input?.vendorId && (!shop || input.vendorId !== shop.id)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Vendors can only access their own dashboard." });
+      }
       if (!shop) {
         return { shop: null, products: [] };
       }
@@ -203,6 +206,9 @@ export const vendorRouter = router({
         targetVendorId = input.vendorId;
       } else {
         const found = await resolveVendorForUser(db, ctx.user.id);
+        if (!isAdminOrMod && input?.vendorId && (!found || input.vendorId !== found.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Vendors can only view their own store revenue." });
+        }
         targetVendorId = found?.id;
       }
 
@@ -214,7 +220,12 @@ export const vendorRouter = router({
       if (prodIds.length === 0) return { totalRevenuePesewas: 0, totalOrders: 0, pendingOrders: 0, completedOrders: 0 };
 
       const matchedItems = await db
-        .select({ orderId: orderItems.orderId })
+        .select({
+          orderId: orderItems.orderId,
+          productId: orderItems.productId,
+          unitPricePesewas: orderItems.unitPricePesewas,
+          quantity: orderItems.quantity,
+        })
         .from(orderItems)
         .where(inArray(orderItems.productId, prodIds));
 
@@ -237,7 +248,10 @@ export const vendorRouter = router({
       let pendingOrders = 0;
       for (const o of relatedOrders) {
         if (o.paymentStatus === "paid" || o.status === "completed") {
-          totalRevenuePesewas += o.totalPesewas ?? 0;
+          const itemsForThisVendor = matchedItems.filter((i) => i.orderId === o.id);
+          for (const item of itemsForThisVendor) {
+            totalRevenuePesewas += (item.unitPricePesewas * item.quantity);
+          }
           completedOrders++;
         } else {
           pendingOrders++;
@@ -278,6 +292,9 @@ export const vendorRouter = router({
         found = rows[0];
       } else {
         found = await resolveVendorForUser(db, ctx.user.id);
+        if (!isAdminOrMod && input.vendorId && (!found || input.vendorId !== found.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Vendors can only update their own profile." });
+        }
       }
 
       if (!found) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor profile not found. Please insert and save your vendor profile first." });
@@ -309,8 +326,8 @@ export const vendorRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database unavailable." });
 
-      if (ctx.user.role !== "admin" && ctx.user.role !== "moderator") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Only admins and moderators can delete vendors." });
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only administrators can delete vendors." });
       }
 
       await db.delete(vendors).where(eq(vendors.id, input.vendorId));
@@ -343,6 +360,9 @@ export const vendorRouter = router({
         targetVendorId = input.vendorId;
       } else {
         const found = await resolveVendorForUser(db, ctx.user.id);
+        if (!isAdminOrMod && input.vendorId && (!found || input.vendorId !== found.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Vendors can only create products for their own store." });
+        }
         targetVendorId = found?.id;
       }
 
@@ -393,6 +413,9 @@ export const vendorRouter = router({
         targetVendorId = input.vendorId;
       } else {
         const found = await resolveVendorForUser(db, ctx.user.id);
+        if (!isAdminOrMod && input.vendorId && (!found || input.vendorId !== found.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Vendors can only update products for their own store." });
+        }
         targetVendorId = found?.id;
       }
 
@@ -443,6 +466,9 @@ export const vendorRouter = router({
         targetVendorId = input.vendorId;
       } else {
         const found = await resolveVendorForUser(db, ctx.user.id);
+        if (!isAdminOrMod && input.vendorId && (!found || input.vendorId !== found.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Vendors can only modify products for their own store." });
+        }
         targetVendorId = found?.id;
       }
 
@@ -474,6 +500,9 @@ export const vendorRouter = router({
         targetVendorId = input.vendorId;
       } else {
         const found = await resolveVendorForUser(db, ctx.user.id);
+        if (!isAdminOrMod && input.vendorId && (!found || input.vendorId !== found.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Vendors can only delete products for their own store." });
+        }
         targetVendorId = found?.id;
       }
 
@@ -503,6 +532,9 @@ export const vendorRouter = router({
         shop = rows[0];
       } else {
         shop = await resolveVendorForUser(db, ctx.user.id);
+        if (!isAdminOrMod && input?.vendorId && (!shop || input.vendorId !== shop.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Vendors can only access their own dashboard." });
+        }
       }
 
       if (!shop) return { shop: null, orders: [] };
@@ -571,6 +603,20 @@ export const vendorRouter = router({
 
       if (!foundOrder[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
 
+      if (ctx.user.role === "vendor") {
+        const shop = await resolveVendorForUser(db, ctx.user.id);
+        if (!shop) throw new TRPCError({ code: "FORBIDDEN", message: "Vendor profile not found." });
+
+        const vendorProds = await db.select({ id: products.id }).from(products).where(eq(products.vendorId, shop.id));
+        const prodIds = vendorProds.map((p) => p.id);
+        const matchingItem = prodIds.length > 0
+          ? await db.select({ id: orderItems.id }).from(orderItems).where(and(eq(orderItems.orderId, input.orderId), inArray(orderItems.productId, prodIds))).limit(1)
+          : [];
+        if (!matchingItem[0]) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only manage orders containing items from your store." });
+        }
+      }
+
       const now = new Date();
       await db
         .update(orders)
@@ -611,6 +657,20 @@ export const vendorRouter = router({
         .limit(1);
 
       if (!foundOrder[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
+
+      if (ctx.user.role === "vendor") {
+        const shop = await resolveVendorForUser(db, ctx.user.id);
+        if (!shop) throw new TRPCError({ code: "FORBIDDEN", message: "Vendor profile not found." });
+
+        const vendorProds = await db.select({ id: products.id }).from(products).where(eq(products.vendorId, shop.id));
+        const prodIds = vendorProds.map((p) => p.id);
+        const matchingItem = prodIds.length > 0
+          ? await db.select({ id: orderItems.id }).from(orderItems).where(and(eq(orderItems.orderId, input.orderId), inArray(orderItems.productId, prodIds))).limit(1)
+          : [];
+        if (!matchingItem[0]) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only manage orders containing items from your store." });
+        }
+      }
 
       const now = new Date();
       // Auto skip to 'on_the_way'

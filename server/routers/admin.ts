@@ -5,7 +5,7 @@ import path from "node:path";
 import fs from "node:fs";
 import crypto, { randomUUID } from "node:crypto";
 import { campusServices, campuses, orderAuditLogs, orderItems, orders, products, promotions, users, vendors } from "../../drizzle/schema";
-import { adminProcedure, router } from "../_core/trpc";
+import { adminProcedure, moderatorOrAdminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { hashPassword, normalizePhone } from "../services/security";
 
@@ -62,7 +62,7 @@ const serviceFields = z.object({
 
 export const adminRouter = router({
   // Analytics & Insights Table
-  analytics: adminProcedure.query(async () => {
+  analytics: moderatorOrAdminProcedure.query(async () => {
     const db = requireDb(await getDb());
     const [orderRows, productRows, vendorRows, campusRows, serviceRows] = await Promise.all([
       db.select().from(orders).where(isNull(orders.deletedAt)).orderBy(desc(orders.createdAt)),
@@ -110,7 +110,7 @@ export const adminRouter = router({
   }),
 
   // Orders Management (Bolt Food style)
-  orders: adminProcedure.input(z.object({
+  orders: moderatorOrAdminProcedure.input(z.object({
     showDeleted: z.boolean().optional(),
   }).optional()).query(async ({ input }) => {
     const db = requireDb(await getDb());
@@ -119,7 +119,7 @@ export const adminRouter = router({
     }
     return db.select().from(orders).where(isNull(orders.deletedAt)).orderBy(desc(orders.createdAt)).limit(100);
   }),
-  updateOrderStatus: adminProcedure.input(z.object({
+  updateOrderStatus: moderatorOrAdminProcedure.input(z.object({
     id: z.number().int().positive(),
     status: z.enum(["payment_pending", "placed", "accepted", "preparing", "on_the_way", "completed", "cancelled"]),
     paymentStatus: z.enum(["pending", "paid", "failed", "refunded"]).optional(),
@@ -242,7 +242,7 @@ export const adminRouter = router({
   }),
 
   // Campuses
-  campuses: adminProcedure.query(async () => requireDb(await getDb()).select().from(campuses).orderBy(campuses.name)),
+  campuses: moderatorOrAdminProcedure.query(async () => requireDb(await getDb()).select().from(campuses).orderBy(campuses.name)),
   createCampus: adminProcedure.input(campusFields).mutation(async ({ input }) => {
     const db = requireDb(await getDb());
     const inserted = await db.insert(campuses).values({ ...input, description: input.description ?? null, isSample: 0, isActive: input.isActive ?? 1 }).$returningId();
@@ -259,7 +259,7 @@ export const adminRouter = router({
   }),
 
   // Vendors
-  vendors: adminProcedure.query(async () => requireDb(await getDb()).select().from(vendors).orderBy(vendors.name)),
+  vendors: moderatorOrAdminProcedure.query(async () => requireDb(await getDb()).select().from(vendors).orderBy(vendors.name)),
   createVendor: adminProcedure.input(vendorFields).mutation(async ({ input }) => {
     const db = requireDb(await getDb());
     const [campus] = await db.select({ id: campuses.id }).from(campuses).where(eq(campuses.id, input.campusId)).limit(1);
@@ -276,7 +276,7 @@ export const adminRouter = router({
     await db.update(vendors).set(input.data).where(eq(vendors.id, input.id));
     return { success: true } as const;
   }),
-  toggleVendorStatus: adminProcedure.input(z.object({
+  toggleVendorStatus: moderatorOrAdminProcedure.input(z.object({
     id: z.number().int().positive(),
     isOpen: z.number().int().min(0).max(1),
   })).mutation(async ({ input }) => {
@@ -290,7 +290,7 @@ export const adminRouter = router({
   }),
 
   // Products
-  products: adminProcedure.query(async () => requireDb(await getDb()).select().from(products).orderBy(products.name)),
+  products: moderatorOrAdminProcedure.query(async () => requireDb(await getDb()).select().from(products).orderBy(products.name)),
   createProduct: adminProcedure.input(productFields).mutation(async ({ input }) => {
     const db = requireDb(await getDb());
     if (input.vendorId) {
@@ -309,7 +309,7 @@ export const adminRouter = router({
     await db.update(products).set(input.data).where(eq(products.id, input.id));
     return { success: true } as const;
   }),
-  toggleProductAvailability: adminProcedure.input(z.object({
+  toggleProductAvailability: moderatorOrAdminProcedure.input(z.object({
     id: z.number().int().positive(),
     isAvailable: z.number().int().min(0).max(1),
   })).mutation(async ({ input }) => {
@@ -323,7 +323,7 @@ export const adminRouter = router({
   }),
 
   // Services
-  services: adminProcedure.query(async () => requireDb(await getDb()).select().from(campusServices).orderBy(campusServices.name)),
+  services: moderatorOrAdminProcedure.query(async () => requireDb(await getDb()).select().from(campusServices).orderBy(campusServices.name)),
   createService: adminProcedure.input(serviceFields).mutation(async ({ input }) => {
     const inserted = await requireDb(await getDb()).insert(campusServices).values({ ...input, description: input.description ?? null, isActive: input.isActive ?? 1, isSample: 0 }).$returningId();
     return { id: inserted[0]?.id };
@@ -439,7 +439,7 @@ export const adminRouter = router({
   }),
 
   // Promotions & Ads
-  promotions: adminProcedure.query(async () => {
+  promotions: moderatorOrAdminProcedure.query(async () => {
     const db = requireDb(await getDb());
     return db.select().from(promotions).orderBy(desc(promotions.priority), desc(promotions.createdAt));
   }),

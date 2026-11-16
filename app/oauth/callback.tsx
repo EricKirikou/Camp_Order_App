@@ -1,6 +1,7 @@
 import { ThemedView } from "@/components/themed-view";
 import * as Api from "@/lib/_core/api";
 import * as Auth from "@/lib/_core/auth";
+import { getRoleDashboardRoute } from "@/lib/camporder/roles";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -55,9 +56,10 @@ export default function OAuthCallback() {
           }
 
           setStatus("success");
-          console.log("[OAuth] Web authentication successful, redirecting to home...");
+          console.log("[OAuth] Web authentication successful, redirecting...");
+          const storedUser = await Auth.getUserInfo();
           setTimeout(() => {
-            router.replace("/(tabs)");
+            router.replace(getRoleDashboardRoute(storedUser?.role) as any);
           }, 1000);
           return;
         }
@@ -186,12 +188,12 @@ export default function OAuthCallback() {
           }
 
           setStatus("success");
-          console.log("[OAuth] Authentication successful, redirecting to home...");
+          console.log("[OAuth] Authentication successful, redirecting to dashboard...");
 
-          // Redirect to home after a short delay
+          // Redirect to role dashboard after a short delay
           setTimeout(() => {
             console.log("[OAuth] Executing redirect...");
-            router.replace("/(tabs)");
+            router.replace(getRoleDashboardRoute(result.user?.role) as any);
           }, 1000);
         } else {
           console.error("[OAuth] No session token in result");
