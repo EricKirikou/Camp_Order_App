@@ -470,8 +470,12 @@ export const adminRouter = router({
     productId: z.number().int().positive().optional().nullable(),
     vendorId: z.number().int().positive().optional().nullable(),
     priority: z.number().int().min(0).max(100).optional(),
+    startsAt: z.string().optional().nullable(),
+    endsAt: z.string().optional().nullable(),
   })).mutation(async ({ input }) => {
     const db = requireDb(await getDb());
+    const startsAtDate = input.startsAt ? new Date(input.startsAt) : null;
+    const endsAtDate = input.endsAt ? new Date(input.endsAt) : null;
     const inserted = await db.insert(promotions).values({
       type: input.type,
       title: input.title,
@@ -483,6 +487,8 @@ export const adminRouter = router({
       productId: input.productId ?? null,
       vendorId: input.vendorId ?? null,
       priority: input.priority ?? 0,
+      startsAt: startsAtDate,
+      endsAt: endsAtDate,
       isActive: 1,
     }).$returningId();
     return { success: true, id: inserted[0]?.id } as const;
@@ -501,10 +507,19 @@ export const adminRouter = router({
       vendorId: z.number().int().positive().nullable().optional(),
       priority: z.number().int().min(0).max(100).optional(),
       isActive: z.number().int().min(0).max(1).optional(),
+      startsAt: z.string().nullable().optional(),
+      endsAt: z.string().nullable().optional(),
     }),
   })).mutation(async ({ input }) => {
     const db = requireDb(await getDb());
-    await db.update(promotions).set(input.data).where(eq(promotions.id, input.id));
+    const dataToSet: Record<string, unknown> = { ...input.data };
+    if ("startsAt" in input.data) {
+      dataToSet.startsAt = input.data.startsAt ? new Date(input.data.startsAt) : null;
+    }
+    if ("endsAt" in input.data) {
+      dataToSet.endsAt = input.data.endsAt ? new Date(input.data.endsAt) : null;
+    }
+    await db.update(promotions).set(dataToSet).where(eq(promotions.id, input.id));
     return { success: true } as const;
   }),
   deletePromotion: adminProcedure.input(z.object({

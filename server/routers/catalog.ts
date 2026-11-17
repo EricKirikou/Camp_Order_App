@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
 import { campuses, products, vendors, users } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { getActivePromotions } from "../services/promotions";
 
 export const CATEGORY_LIST = [
   { slug: "food", name: "Food", icon: "fast-food-outline" },
@@ -34,14 +35,14 @@ export const catalogRouter = router({
     const db = requireDb(await getDb());
     const availableCampuses = await db.select().from(campuses).where(eq(campuses.isActive, 1)).orderBy(campuses.name);
     const campus = availableCampuses.find((item) => item.id === input?.campusId) ?? availableCampuses[0] ?? null;
-    if (!campus) return { campus: null, categories: CATEGORY_LIST, vendors: [], products: [] };
+    if (!campus) return { campus: null, categories: CATEGORY_LIST, vendors: [], products: [], promotions: { bannerAds: [], productPromos: [], featuredVendors: [] } };
 
     // Vendors strictly see only items and store they create
     if (ctx.user?.role === "vendor") {
       const userVendors = await db.select().from(vendors).where(eq(vendors.userId, ctx.user.id)).limit(1);
       const userVendor = userVendors[0] ?? null;
       if (!userVendor) {
-        return { campus, categories: CATEGORY_LIST, vendors: [], products: [] };
+        return { campus, categories: CATEGORY_LIST, vendors: [], products: [], promotions: { bannerAds: [], productPromos: [], featuredVendors: [] } };
       }
       const vendorProducts = await db
         .select()
@@ -49,12 +50,17 @@ export const catalogRouter = router({
         .where(and(eq(products.vendorId, userVendor.id), eq(products.isAvailable, 1)))
         .orderBy(products.id)
         .limit(12);
-      return { campus, categories: CATEGORY_LIST, vendors: [userVendor], products: vendorProducts };
+      return { campus, categories: CATEGORY_LIST, vendors: [userVendor], products: vendorProducts, promotions: { bannerAds: [], productPromos: [], featuredVendors: [] } };
     }
 
     const campusVendors = await db.select().from(vendors).where(and(eq(vendors.campusId, campus.id), eq(vendors.isOpen, 1))).orderBy(vendors.name).limit(8);
     const featuredProducts = await db.select().from(products).where(eq(products.isAvailable, 1)).orderBy(products.id).limit(12);
-    return { campus, categories: CATEGORY_LIST, vendors: campusVendors, products: featuredProducts };
+    const promos = await getActivePromotions(campus.id);
+    return { campus, categories: CATEGORY_LIST, vendors: campusVendors, products: featuredProducts, promotions: promos };
+  }),
+
+  promotions: publicProcedure.input(z.object({ campusId: z.number().int().positive().optional() }).optional()).query(async ({ input }) => {
+    return getActivePromotions(input?.campusId);
   }),
 
   listProducts: publicProcedure.input(z.object({

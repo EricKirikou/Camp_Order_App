@@ -458,7 +458,7 @@ export default function VendorPortalScreen() {
       await invalidateAll();
       setFeedback(
         `Vendor "${result.vendorName}" has been reset successfully. ` +
-        `${result.productsDeleted} product(s) removed. The vendor can log in and set up their store again.`
+        `${result.productsDeletedCount} product(s) removed. The vendor can log in and set up their store again.`
       );
     } catch (err) {
       setErrorMsg(friendlyError(err, "Could not reset vendor account."));
