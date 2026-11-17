@@ -285,13 +285,29 @@ export default function AdminScreen() {
         setError(friendlyError(err, "Could not delete. May be linked to active orders."));
       }
     };
-    if (Platform.OS === "web") {
-      if (window.confirm(`Delete ${label}? This cannot be undone.`)) void run();
+    if (type === "vendors") {
+      // Vendor reset: keep user account, clear business data
+      if (Platform.OS === "web") {
+        if (window.confirm(`Reset vendor account for "${label}"?\n\nThis will permanently clear all business information and products, but their login account will remain active and they can set up again.`)) void run();
+      } else {
+        Alert.alert(
+          "Reset Vendor Account?",
+          `All business information and products for "${label}" will be permanently cleared.\n\nTheir login account stays active — they can set up their store again.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Reset Account", style: "destructive", onPress: () => void run() },
+          ],
+        );
+      }
     } else {
-      Alert.alert("Delete record?", `This will permanently remove ${label}.`, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => void run() },
-      ]);
+      if (Platform.OS === "web") {
+        if (window.confirm(`Delete ${label}? This cannot be undone.`)) void run();
+      } else {
+        Alert.alert("Delete record?", `This will permanently remove ${label}.`, [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => void run() },
+        ]);
+      }
     }
   };
 

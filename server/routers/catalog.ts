@@ -52,7 +52,7 @@ export const catalogRouter = router({
       return { campus, categories: CATEGORY_LIST, vendors: [userVendor], products: vendorProducts };
     }
 
-    const campusVendors = await db.select().from(vendors).where(eq(vendors.campusId, campus.id)).orderBy(vendors.name).limit(8);
+    const campusVendors = await db.select().from(vendors).where(and(eq(vendors.campusId, campus.id), eq(vendors.isOpen, 1))).orderBy(vendors.name).limit(8);
     const featuredProducts = await db.select().from(products).where(eq(products.isAvailable, 1)).orderBy(products.id).limit(12);
     return { campus, categories: CATEGORY_LIST, vendors: campusVendors, products: featuredProducts };
   }),
@@ -127,6 +127,10 @@ export const catalogRouter = router({
 
     const vendorRows = await db.select().from(vendors).where(eq(vendors.id, input.id)).limit(1);
     if (!vendorRows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Campus seller not found." });
+    // Hide reset/incomplete vendor storefronts from public access
+    if (!vendorRows[0].isOpen && vendorRows[0].name === "[Pending Profile Setup]") {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Campus seller not found." });
+    }
     const items = await db.select().from(products).where(eq(products.vendorId, input.id)).limit(80);
     return { ...vendorRows[0], products: items };
   }),

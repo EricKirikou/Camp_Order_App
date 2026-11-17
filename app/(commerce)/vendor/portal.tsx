@@ -635,8 +635,8 @@ export default function VendorPortalScreen() {
             </Pressable>
           </View>
           {user?.role === "admin" && effectiveVendorId && (
-            <Pressable onPress={handleDeleteVendor} style={styles.deleteVendorBtn}>
-              <Ionicons name="trash-outline" size={18} color="#DC2626" />
+            <Pressable onPress={() => setShowResetConfirm(true)} style={styles.deleteVendorBtn}>
+              <Ionicons name="refresh-outline" size={18} color="#DC2626" />
             </Pressable>
           )}
         </View>
@@ -1064,6 +1064,36 @@ export default function VendorPortalScreen() {
                 ))
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reset Vendor Account Confirmation Modal */}
+      <Modal visible={showResetConfirm} transparent animationType="fade" onRequestClose={() => setShowResetConfirm(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: "58%" }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Reset Vendor Account?</Text>
+              <Pressable onPress={() => setShowResetConfirm(false)}>
+                <Ionicons name="close" size={24} color={C.ink} />
+              </Pressable>
+            </View>
+            <Text style={{ color: C.muted, fontSize: 14, lineHeight: 21 }}>
+              This will permanently clear all business information and products for{" "}
+              <Text style={{ fontWeight: "800", color: C.ink }}>{shop?.name ?? "this vendor"}</Text>.{"\n\n"}
+              The vendor{"'"}s login account will remain active. They will be able to sign in and set up their store again.{"\n\n"}
+              Historical orders and payment records will be preserved.
+            </Text>
+            <View style={{ gap: 10, marginTop: 4 }}>
+              <Button
+                title={resetVendorMutation.isPending ? "Resetting…" : "Reset Vendor Account"}
+                variant="primary"
+                loading={resetVendorMutation.isPending}
+                onPress={() => void handleResetVendor()}
+                style={{ backgroundColor: "#DC2626" }}
+              />
+              <Button title="Cancel" variant="quiet" onPress={() => setShowResetConfirm(false)} />
+            </View>
           </View>
         </View>
       </Modal>
