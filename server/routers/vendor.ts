@@ -1,9 +1,10 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { campuses, orderAuditLogs, orderItems, orders, products, promotions, users, vendors } from "../../drizzle/schema";
+import { campuses, cartItems, orderAuditLogs, orderItems, orders, products, promotions, users, vendors } from "../../drizzle/schema";
 import { router, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
+import { resetVendorBusiness } from "../services/vendorReset";
 
 /** Roles that are allowed to access the vendor kitchen portal */
 const VENDOR_ROLES = ["vendor", "admin", "moderator"] as const;
@@ -116,7 +117,7 @@ export const vendorRouter = router({
       if (input?.vendorId && (!shop || input.vendorId !== shop.id)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Vendors can only access their own dashboard." });
       }
-      if (!shop) {
+      if (!shop || !shop.name || shop.name === "[Pending Profile Setup]") {
         return { shop: null, products: [] };
       }
 
@@ -159,6 +160,36 @@ export const vendorRouter = router({
         .limit(1);
 
       if (existing[0]) {
+        // If the vendor's profile was reset (incomplete/pending), update the profile details!
+        const isResetProfile =
+          !existing[0].name ||
+          existing[0].name === "[Pending Profile Setup]" ||
+          existing[0].category === "Pending Setup";
+
+        if (isResetProfile) {
+          const slug = `${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}-${ctx.user.id}-${Date.now().toString(36)}`;
+          await db
+            .update(vendors)
+            .set({
+              name: input.name,
+              slug,
+              category: input.category,
+              description: input.description ?? "Fresh campus meals and bites prepared to order.",
+              etaMin: input.etaMin,
+              deliveryFeePesewas: input.deliveryFeePesewas,
+              isOpen: 1,
+            })
+            .where(eq(vendors.id, existing[0].id));
+
+          const updated = await db
+            .select()
+            .from(vendors)
+            .where(eq(vendors.id, existing[0].id))
+            .limit(1);
+
+          return { shop: updated[0], isNew: false };
+        }
+
         return { shop: existing[0], isNew: false };
       }
 
@@ -323,90 +354,13 @@ export const vendorRouter = router({
   deleteVendor: protectedProcedure
     .input(z.object({ vendorId: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database unavailable." });
-
-      if (ctx.user.role !== "admin") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Only administrators can delete vendors." });
-      }
-
-      await db.delete(vendors).where(eq(vendors.id, input.vendorId));
-      return { success: true };
+      return resetVendorBusiness(input.vendorId, ctx.user);
     }),
 
-  /**
-   * Reset a vendor's business — admin only.
-   * Keeps the user account and role intact.
-   * Deletes all products, clears promotions, and removes the vendor row
-   * so the vendor sees the "Set Up Your Kitchen" onboarding flow on next login.
-   * Historical order records are preserved (order_items still reference product IDs
-   * and store product names inline, so they remain readable even after products are gone).
-   */
   resetVendor: protectedProcedure
     .input(z.object({ vendorId: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database unavailable." });
-
-      if (ctx.user.role !== "admin") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Only administrators can reset vendor accounts." });
-      }
-
-      // 1. Load the vendor to validate it exists and capture snapshot data
-      const vendorRows = await db.select().from(vendors).where(eq(vendors.id, input.vendorId)).limit(1);
-      const vendor = vendorRows[0];
-      if (!vendor) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Vendor not found." });
-      }
-
-      // 2. Load all products for the snapshot
-      const vendorProducts = await db.select().from(products).where(eq(products.vendorId, vendor.id));
-      const productIds = vendorProducts.map((p) => p.id);
-
-      // 3. Delete promotions linked to this vendor or its products
-      if (productIds.length > 0) {
-        await db.delete(promotions).where(inArray(promotions.productId, productIds));
-      }
-      await db.delete(promotions).where(eq(promotions.vendorId, vendor.id));
-
-      // 4. Delete all products belonging to the vendor
-      if (productIds.length > 0) {
-        await db.delete(products).where(eq(products.vendorId, vendor.id));
-      }
-
-      // 5. Delete the vendor row itself — the user account stays, and the
-      //    portal's "no shop" check will show the onboarding/setup form again.
-      await db.delete(vendors).where(eq(vendors.id, vendor.id));
-
-      // 6. Audit log — record who performed the reset and what was cleared
-      try {
-        await db.insert(orderAuditLogs).values({
-          orderId: 0,
-          orderCode: `VENDOR_RESET_${vendor.id}`,
-          action: "admin_reset_vendor",
-          actorUserId: ctx.user.id,
-          actorName: ctx.user.name ?? "Admin",
-          actorEmail: ctx.user.email ?? null,
-          reason: `Admin reset vendor account: ${vendor.name} (ID ${vendor.id})`,
-          snapshot: JSON.stringify({
-            vendorId: vendor.id,
-            vendorUserId: vendor.userId,
-            vendorName: vendor.name,
-            vendorSlug: vendor.slug,
-            vendorCategory: vendor.category,
-            vendorDescription: vendor.description,
-            productsDeleted: vendorProducts.length,
-            productNames: vendorProducts.map((p) => p.name),
-            resetAt: new Date().toISOString(),
-          }),
-        });
-      } catch { /* audit log failure should not block the operation */ }
-
-      return {
-        success: true,
-        vendorName: vendor.name,
-        productsDeleted: vendorProducts.length,
-      };
+      return resetVendorBusiness(input.vendorId, ctx.user);
     }),
 
   createProduct: protectedProcedure
@@ -583,7 +537,29 @@ export const vendorRouter = router({
 
       if (!targetVendorId) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor profile not found." });
 
-      // Hard-delete the product so it no longer appears on the catalog
+      // 1. Remove from active carts
+      await db.delete(cartItems).where(eq(cartItems.productId, input.productId));
+      // 2. Remove any promotions for this product
+      await db.delete(promotions).where(eq(promotions.productId, input.productId));
+
+      // 3. Check if product has historical order references
+      const ordered = await db
+        .select({ id: orderItems.id })
+        .from(orderItems)
+        .where(eq(orderItems.productId, input.productId))
+        .limit(1);
+
+      if (ordered.length > 0) {
+        // Disassociate and disable so the vendor's active catalog no longer shows it,
+        // while preserving completed orders and avoiding FK violation
+        await db
+          .update(products)
+          .set({ isAvailable: 0, vendorId: null })
+          .where(and(eq(products.id, input.productId), eq(products.vendorId, targetVendorId)));
+        return { success: true, archived: true };
+      }
+
+      // 4. If never ordered, permanently delete
       await db
         .delete(products)
         .where(and(eq(products.id, input.productId), eq(products.vendorId, targetVendorId)));

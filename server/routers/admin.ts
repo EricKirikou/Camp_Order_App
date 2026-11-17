@@ -4,10 +4,11 @@ import { z } from "zod";
 import path from "node:path";
 import fs from "node:fs";
 import crypto, { randomUUID } from "node:crypto";
-import { campusServices, campuses, orderAuditLogs, orderItems, orders, products, promotions, users, vendors } from "../../drizzle/schema";
+import { campusServices, campuses, cartItems, orderAuditLogs, orderItems, orders, products, promotions, users, vendors } from "../../drizzle/schema";
 import { adminProcedure, moderatorOrAdminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { hashPassword, normalizePhone } from "../services/security";
+import { resetVendorBusiness } from "../services/vendorReset";
 
 function requireDb(db: Awaited<ReturnType<typeof getDb>>) {
   if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Admin data is unavailable." });
@@ -284,9 +285,11 @@ export const adminRouter = router({
     await db.update(vendors).set({ isOpen: input.isOpen }).where(eq(vendors.id, input.id));
     return { success: true } as const;
   }),
-  deleteVendor: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input }) => {
-    try { await requireDb(await getDb()).delete(vendors).where(eq(vendors.id, input.id)); return { success: true } as const; }
-    catch (error) { return rethrowDeleteConflict(error); }
+  deleteVendor: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
+    return resetVendorBusiness(input.id, ctx.user);
+  }),
+  resetVendor: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
+    return resetVendorBusiness(input.id, ctx.user);
   }),
 
   // Products
@@ -318,8 +321,21 @@ export const adminRouter = router({
     return { success: true } as const;
   }),
   deleteProduct: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input }) => {
-    try { await requireDb(await getDb()).delete(products).where(eq(products.id, input.id)); return { success: true } as const; }
-    catch (error) { return rethrowDeleteConflict(error); }
+    const db = requireDb(await getDb());
+    // 1. Remove from active carts
+    await db.delete(cartItems).where(eq(cartItems.productId, input.id));
+    // 2. Remove promotions referencing this product
+    await db.delete(promotions).where(eq(promotions.productId, input.id));
+    // 3. Check if product has historical order references
+    const ordered = await db.select({ id: orderItems.id }).from(orderItems).where(eq(orderItems.productId, input.id)).limit(1);
+    if (ordered.length > 0) {
+      // Retain product row to preserve order item referential integrity, but disassociate and mark unavailable
+      await db.update(products).set({ isAvailable: 0, vendorId: null }).where(eq(products.id, input.id));
+      return { success: true, archived: true } as const;
+    }
+    // 4. Safe to permanently delete
+    await db.delete(products).where(eq(products.id, input.id));
+    return { success: true } as const;
   }),
 
   // Services
