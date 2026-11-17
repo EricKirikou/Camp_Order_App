@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { campuses, orderAuditLogs, orderItems, orders, products, users, vendors } from "../../drizzle/schema";
+import { campuses, orderAuditLogs, orderItems, orders, products, promotions, users, vendors } from "../../drizzle/schema";
 import { router, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
 
@@ -334,6 +334,81 @@ export const vendorRouter = router({
       return { success: true };
     }),
 
+  /**
+   * Reset a vendor's business — admin only.
+   * Keeps the user account and role intact.
+   * Deletes all products, clears promotions, and removes the vendor row
+   * so the vendor sees the "Set Up Your Kitchen" onboarding flow on next login.
+   * Historical order records are preserved (order_items still reference product IDs
+   * and store product names inline, so they remain readable even after products are gone).
+   */
+  resetVendor: protectedProcedure
+    .input(z.object({ vendorId: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database unavailable." });
+
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only administrators can reset vendor accounts." });
+      }
+
+      // 1. Load the vendor to validate it exists and capture snapshot data
+      const vendorRows = await db.select().from(vendors).where(eq(vendors.id, input.vendorId)).limit(1);
+      const vendor = vendorRows[0];
+      if (!vendor) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Vendor not found." });
+      }
+
+      // 2. Load all products for the snapshot
+      const vendorProducts = await db.select().from(products).where(eq(products.vendorId, vendor.id));
+      const productIds = vendorProducts.map((p) => p.id);
+
+      // 3. Delete promotions linked to this vendor or its products
+      if (productIds.length > 0) {
+        await db.delete(promotions).where(inArray(promotions.productId, productIds));
+      }
+      await db.delete(promotions).where(eq(promotions.vendorId, vendor.id));
+
+      // 4. Delete all products belonging to the vendor
+      if (productIds.length > 0) {
+        await db.delete(products).where(eq(products.vendorId, vendor.id));
+      }
+
+      // 5. Delete the vendor row itself — the user account stays, and the
+      //    portal's "no shop" check will show the onboarding/setup form again.
+      await db.delete(vendors).where(eq(vendors.id, vendor.id));
+
+      // 6. Audit log — record who performed the reset and what was cleared
+      try {
+        await db.insert(orderAuditLogs).values({
+          orderId: 0,
+          orderCode: `VENDOR_RESET_${vendor.id}`,
+          action: "admin_reset_vendor",
+          actorUserId: ctx.user.id,
+          actorName: ctx.user.name ?? "Admin",
+          actorEmail: ctx.user.email ?? null,
+          reason: `Admin reset vendor account: ${vendor.name} (ID ${vendor.id})`,
+          snapshot: JSON.stringify({
+            vendorId: vendor.id,
+            vendorUserId: vendor.userId,
+            vendorName: vendor.name,
+            vendorSlug: vendor.slug,
+            vendorCategory: vendor.category,
+            vendorDescription: vendor.description,
+            productsDeleted: vendorProducts.length,
+            productNames: vendorProducts.map((p) => p.name),
+            resetAt: new Date().toISOString(),
+          }),
+        });
+      } catch { /* audit log failure should not block the operation */ }
+
+      return {
+        success: true,
+        vendorName: vendor.name,
+        productsDeleted: vendorProducts.length,
+      };
+    }),
+
   createProduct: protectedProcedure
     .input(
       z.object({
@@ -637,7 +712,7 @@ export const vendorRouter = router({
             startedPreparingAt: now.toISOString(),
           }),
         });
-      } catch {}
+      } catch { }
 
       return { success: true, status: "preparing" as const, updatedAt: now.toISOString() };
     }),
@@ -693,7 +768,7 @@ export const vendorRouter = router({
             preparedAt: now.toISOString(),
           }),
         });
-      } catch {}
+      } catch { }
 
       return { success: true, status: "on_the_way" as const, updatedAt: now.toISOString() };
     }),

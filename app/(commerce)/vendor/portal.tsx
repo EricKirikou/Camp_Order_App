@@ -238,8 +238,12 @@ export default function VendorPortalScreen() {
   const toggleProductMutation = trpc.vendor.toggleProductAvailability.useMutation();
   const deleteProductMutation = trpc.vendor.deleteProduct.useMutation();
   const deleteVendorMutation = trpc.vendor.deleteVendor.useMutation();
+  const resetVendorMutation = trpc.vendor.resetVendor.useMutation();
   const markPreparingMutation = trpc.vendor.markPreparing.useMutation();
   const markPreparedMutation = trpc.vendor.markPrepared.useMutation();
+
+  // Reset vendor confirmation modal state
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // New Vendor Registration / Setup State
   const [setupName, setSetupName] = useState(user?.name ? `${user.name}'s Kitchen` : "");
@@ -440,6 +444,24 @@ export default function VendorPortalScreen() {
       setFeedback("Vendor deleted successfully.");
     } catch (err) {
       setErrorMsg(friendlyError(err, "Could not delete vendor."));
+    }
+  };
+
+  const handleResetVendor = async () => {
+    if (!effectiveVendorId) return;
+    setShowResetConfirm(false);
+    setErrorMsg("");
+    setFeedback("");
+    try {
+      const result = await resetVendorMutation.mutateAsync({ vendorId: effectiveVendorId });
+      setSelectedVendorId(undefined);
+      await invalidateAll();
+      setFeedback(
+        `Vendor "${result.vendorName}" has been reset successfully. ` +
+        `${result.productsDeleted} product(s) removed. The vendor can log in and set up their store again.`
+      );
+    } catch (err) {
+      setErrorMsg(friendlyError(err, "Could not reset vendor account."));
     }
   };
 
